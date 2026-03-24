@@ -17,6 +17,11 @@ import {
   setAllowed,
 } from '@stellar/freighter-api';
 
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+const STORAGE_KEY_ADDRESS = 'stellar_address';
+const STORAGE_KEY_INDEX = 'stellar_selected_account_index';
+const STORAGE_KEY_TIMESTAMP = 'stellar_connection_timestamp';
+
 declare global {
   interface Window {
     freighter?: {
@@ -64,6 +69,8 @@ interface StellarWalletContextType {
   isFreighterInstalled: boolean;
   isLoading: boolean;
   error: string | null;
+  sessionExpired: boolean;
+  clearSessionExpired: () => void;
 }
 
 const defaultConnection: StellarWalletConnection = {
@@ -85,6 +92,8 @@ const StellarWalletContext = createContext<StellarWalletContextType>({
   isFreighterInstalled: false,
   isLoading: false,
   error: null,
+  sessionExpired: false,
+  clearSessionExpired: () => {},
 });
 
 export function StellarWalletProvider({ children }: { children: ReactNode }) {
@@ -95,6 +104,7 @@ export function StellarWalletProvider({ children }: { children: ReactNode }) {
   const [isFreighterInstalled, setIsFreighterInstalled] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   useEffect(() => {
     const check = async () => {
@@ -109,9 +119,22 @@ export function StellarWalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const stored = localStorage.getItem('stellar_address');
-    const storedIndex = localStorage.getItem('stellar_selected_account_index');
+    const stored = localStorage.getItem(STORAGE_KEY_ADDRESS);
+    const storedIndex = localStorage.getItem(STORAGE_KEY_INDEX);
+    const storedTimestamp = localStorage.getItem(STORAGE_KEY_TIMESTAMP);
     if (stored && isFreighterInstalled) {
+      const connectionTime = storedTimestamp ? parseInt(storedTimestamp, 10) : 0;
+      const now = Date.now();
+      if (now - connectionTime > SESSION_TTL_MS) {
+        localStorage.removeItem(STORAGE_KEY_ADDRESS);
+        localStorage.removeItem(STORAGE_KEY_INDEX);
+        localStorage.removeItem(STORAGE_KEY_TIMESTAMP);
+        setSessionExpired(true);
+        setConnection(defaultConnection);
+        setAccounts([]);
+        setSelectedAccountIndex(0);
+        return;
+      }
       getAddress()
         .then(async (addrResult) => {
           if (!addrResult.error && addrResult.address === stored) {
@@ -143,6 +166,7 @@ export function StellarWalletProvider({ children }: { children: ReactNode }) {
   const connect = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+    setSessionExpired(false);
     try {
       const accessResult = await requestAccess();
       if (accessResult.error) throw new Error(String(accessResult.error));
@@ -154,7 +178,9 @@ export function StellarWalletProvider({ children }: { children: ReactNode }) {
       const accountsResult = await getFreighterAccounts();
 
       const addr = addrResult.address;
-      localStorage.setItem('stellar_address', addr);
+      const now = Date.now();
+      localStorage.setItem(STORAGE_KEY_ADDRESS, addr);
+      localStorage.setItem(STORAGE_KEY_TIMESTAMP, String(now));
 
       if (!accountsResult.error && accountsResult.accounts.length > 0) {
         const walletAccounts: WalletAccount[] = accountsResult.accounts.map((a: string, idx: number) => ({
@@ -164,7 +190,7 @@ export function StellarWalletProvider({ children }: { children: ReactNode }) {
         setAccounts(walletAccounts);
         const currentIndex = accountsResult.accounts.indexOf(addr);
         setSelectedAccountIndex(currentIndex >= 0 ? currentIndex : 0);
-        localStorage.setItem('stellar_selected_account_index', String(currentIndex >= 0 ? currentIndex : 0));
+        localStorage.setItem(STORAGE_KEY_INDEX, String(currentIndex >= 0 ? currentIndex : 0));
       }
 
       setConnection({
@@ -184,12 +210,14 @@ export function StellarWalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const disconnect = useCallback(() => {
-    localStorage.removeItem('stellar_address');
-    localStorage.removeItem('stellar_selected_account_index');
+    localStorage.removeItem(STORAGE_KEY_ADDRESS);
+    localStorage.removeItem(STORAGE_KEY_INDEX);
+    localStorage.removeItem(STORAGE_KEY_TIMESTAMP);
     setConnection(defaultConnection);
     setAccounts([]);
     setSelectedAccountIndex(0);
     setError(null);
+    setSessionExpired(false);
   }, []);
 
   const signTx = useCallback(
@@ -209,42 +237,49 @@ export function StellarWalletProvider({ children }: { children: ReactNode }) {
       if (index < 0 || index >= accounts.length) return;
       const selectedAccount = accounts[index];
       try {
-        await setFreighterAllowedBack(selectedAccount.address);
-        setSelectedAccountIndex(index);
-        localStorage.setItem('stellar_selected_account_index', String(index));
-        setConnection((prev) => ({
-          ...prev,
-          address: selectedAccount.address,
-          publicKey: selectedAccount.address,
-        }));
-        localStorage.setItem('stellar_address', selectedAccount.address);
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : 'Failed to switch account',
-        );
-      }
-    },
-    [accounts],
-  );
+      await setFreighterAllowedBack(selectedAccount.address);
+      setSelectedAccountIndex(index);
+      localStorage.setItem(STORAGE_KEY_INDEX, String(index));
+      setConnection((prev) => ({
+        ...prev,
+        address: selectedAccount.address,
+        publicKey: selectedAccount.address,
+      }));
+      localStorage.setItem(STORAGE_KEY_ADDRESS, selectedAccount.address);
+      localStorage.setItem(STORAGE_KEY_TIMESTAMP, String(Date.now()));
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Failed to switch account',
+      );
+    }
+  },
+  [accounts],
+);
 
-  return (
-    <StellarWalletContext.Provider
-      value={{
-        connection,
-        accounts,
-        selectedAccountIndex,
-        selectAccount,
-        connect,
-        disconnect,
-        signTx,
-        isFreighterInstalled,
-        isLoading,
-        error,
-      }}
-    >
-      {children}
-    </StellarWalletContext.Provider>
-  );
+const clearSessionExpired = useCallback(() => {
+  setSessionExpired(false);
+}, []);
+
+return (
+  <StellarWalletContext.Provider
+    value={{
+      connection,
+      accounts,
+      selectedAccountIndex,
+      selectAccount,
+      connect,
+      disconnect,
+      signTx,
+      isFreighterInstalled,
+      isLoading,
+      error,
+      sessionExpired,
+      clearSessionExpired,
+    }}
+  >
+    {children}
+  </StellarWalletContext.Provider>
+);
 }
 
 export function useStellarWallet() {

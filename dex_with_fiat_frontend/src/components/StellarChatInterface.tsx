@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Wallet, LogOut, Moon, Sun, Menu, X, Plus, Star, Settings, ChevronDown, User } from 'lucide-react';
+import { Wallet, LogOut, Moon, Sun, Menu, X, Plus, Star, Settings, ChevronDown, User, AlertCircle } from 'lucide-react';
 import { useStellarWallet } from '@/contexts/StellarWalletContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import useChat from '@/hooks/useChat';
@@ -17,7 +17,7 @@ import SkeletonSidebar from '@/components/ui/skeleton/SkeletonSidebar';
 import { useUserPreferences } from '@/contexts/UserPreferencesContext';
 
 export default function StellarChatInterface() {
-  const { connection, connect, disconnect, accounts, selectedAccountIndex, selectAccount } = useStellarWallet();
+  const { connection, connect, disconnect, accounts, selectedAccountIndex, selectAccount, sessionExpired, clearSessionExpired } = useStellarWallet();
   const { isDarkMode, toggleDarkMode } = useTheme();
   const { fiatCurrency } = useUserPreferences();
 
@@ -475,11 +475,43 @@ export default function StellarChatInterface() {
         xlmAmount={bankDetailsXlmAmount}
       />
 
-      {/* Settings panel */}
-      <UserSettings
-        isOpen={showSettings}
-        onClose={() => setShowSettings(false)}
-      />
+  {/* Settings panel */}
+  <UserSettings
+    isOpen={showSettings}
+    onClose={() => setShowSettings(false)}
+  />
+
+  {/* Session expired banner */}
+  {sessionExpired && (
+    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-md w-full px-4">
+      <div className={`flex items-center gap-3 p-4 rounded-lg shadow-lg border ${isDarkMode ? 'bg-gray-800 border-yellow-600/50' : 'bg-white border-yellow-500'}`}>
+        <AlertCircle className="w-5 h-5 text-yellow-500 flex-shrink-0" />
+        <div className="flex-1">
+          <p className={`text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            Wallet Session Expired
+          </p>
+          <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            Your wallet session has expired after 24 hours. Please reconnect to continue.
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            clearSessionExpired();
+            connect();
+          }}
+          className="flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-lg bg-yellow-500 hover:bg-yellow-600 text-white transition-colors"
+        >
+          Reconnect
+        </button>
+        <button
+          onClick={clearSessionExpired}
+          className={`flex-shrink-0 p-1 rounded-lg transition-colors ${isDarkMode ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'}`}
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
     </div>
-  );
+  )}
+</div>
+);
 }
