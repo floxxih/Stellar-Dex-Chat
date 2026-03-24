@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Wallet, LogOut, Moon, Sun, Menu, X, Plus, Star, Settings } from 'lucide-react';
+import { Wallet, LogOut, Moon, Sun, Menu, X, Plus, Star, Settings, ChevronDown, User } from 'lucide-react';
 import { useStellarWallet } from '@/contexts/StellarWalletContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import useChat from '@/hooks/useChat';
@@ -17,7 +17,7 @@ import SkeletonSidebar from '@/components/ui/skeleton/SkeletonSidebar';
 import { useUserPreferences } from '@/contexts/UserPreferencesContext';
 
 export default function StellarChatInterface() {
-  const { connection, connect, disconnect } = useStellarWallet();
+  const { connection, connect, disconnect, accounts, selectedAccountIndex, selectAccount } = useStellarWallet();
   const { isDarkMode, toggleDarkMode } = useTheme();
   const { fiatCurrency } = useUserPreferences();
 
@@ -29,6 +29,8 @@ export default function StellarChatInterface() {
   const [bankDetailsXlmAmount, setBankDetailsXlmAmount] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
   const [isSheetMounted, setIsSheetMounted] = useState(false);
+  const [showAccountDropdown, setShowAccountDropdown] = useState(false);
+  const accountDropdownRef = useRef<HTMLDivElement>(null);
 
   const sheetRef = useRef<HTMLDivElement>(null);
   const dragStartY = useRef(0);
@@ -101,6 +103,19 @@ export default function StellarChatInterface() {
     return () => {
       if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
     };
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        accountDropdownRef.current &&
+        !accountDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowAccountDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const closeSheet = useCallback(() => {
@@ -290,34 +305,69 @@ export default function StellarChatInterface() {
               )}
             </button>
 
-            {connection.isConnected ? (
-              <div className="flex items-center gap-2">
-                <div
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium ${isDarkMode ? 'bg-gray-800 text-gray-200' : 'bg-gray-100 text-gray-700'}`}
-                >
-                  <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" />
-                  <span className="font-mono">
-                    {connection.address.slice(0, 6)}…
-                    {connection.address.slice(-4)}
-                  </span>
-                </div>
-                <button
-                  onClick={disconnect}
-                  title="Disconnect"
-                  className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'hover:bg-gray-800 text-gray-400' : 'hover:bg-gray-100 text-gray-600'}`}
-                >
-                  <LogOut className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
+        {connection.isConnected ? (
+          <div className="flex items-center gap-2">
+            <div ref={accountDropdownRef} className="relative">
               <button
-                onClick={connect}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-sm font-medium rounded-lg transition-all"
+                onClick={() => accounts.length > 1 && setShowAccountDropdown(!showAccountDropdown)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${isDarkMode ? 'bg-gray-800 text-gray-200 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'} ${accounts.length > 1 ? 'cursor-pointer' : 'cursor-default'}`}
               >
-                <Wallet className="w-4 h-4" />
-                Connect Freighter
+                <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" />
+                <span className="font-mono">
+                  {connection.address.slice(0, 6)}…
+                  {connection.address.slice(-4)}
+                </span>
+                {accounts.length > 1 && (
+                  <ChevronDown className={`w-3 h-3 transition-transform ${showAccountDropdown ? 'rotate-180' : ''}`} />
+                )}
               </button>
-            )}
+              {showAccountDropdown && accounts.length > 1 && (
+                <div
+                  className={`absolute right-0 top-full mt-1 w-56 rounded-lg shadow-lg border z-50 ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}
+                >
+                  <div className={`px-3 py-2 text-xs font-semibold border-b ${isDarkMode ? 'text-gray-400 border-gray-700' : 'text-gray-500 border-gray-200'}`}>
+                    Switch Account
+                  </div>
+                  {accounts.map((account, idx) => (
+                    <button
+                      key={account.address}
+                      onClick={() => {
+                        selectAccount(idx);
+                        setShowAccountDropdown(false);
+                      }}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors ${idx === selectedAccountIndex ? (isDarkMode ? 'bg-blue-900/50 text-blue-400' : 'bg-blue-50 text-blue-600') : (isDarkMode ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-50')}`}
+                    >
+                      <User className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span className="font-mono truncate">
+                        {account.address.slice(0, 6)}…{account.address.slice(-4)}
+                      </span>
+                      {idx === selectedAccountIndex && (
+                        <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded ${isDarkMode ? 'bg-blue-900/50' : 'bg-blue-100'}`}>
+                          Active
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button
+              onClick={disconnect}
+              title="Disconnect"
+              className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'hover:bg-gray-800 text-gray-400' : 'hover:bg-gray-100 text-gray-600'}`}
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={connect}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-sm font-medium rounded-lg transition-all"
+          >
+            <Wallet className="w-4 h-4" />
+            Connect Freighter
+          </button>
+        )}
           </div>
         </header>
 
