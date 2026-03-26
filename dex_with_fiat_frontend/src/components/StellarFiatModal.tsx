@@ -89,10 +89,15 @@ export default function StellarFiatModal({
 
   const handleCopyHash = () => {
     if (!txHash) return;
-    navigator.clipboard?.writeText(txHash).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }).catch(() => { /* clipboard unavailable — no-op */ });
+    navigator.clipboard
+      ?.writeText(txHash)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => {
+        /* clipboard unavailable — no-op */
+      });
   };
 
   const {
@@ -227,7 +232,10 @@ export default function StellarFiatModal({
           );
         } else {
           const { simulateDeposit } = await import('@/lib/stellarContract');
-          estimate = await simulateDeposit(connection.publicKey, currentStroops);
+          estimate = await simulateDeposit(
+            connection.publicKey,
+            currentStroops,
+          );
         }
         if (!cancelled) {
           setFeeEstimate(estimate);
@@ -248,7 +256,14 @@ export default function StellarFiatModal({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [amount, connection.isConnected, connection.publicKey, isAdminMode, isOpen, recipient]);
+  }, [
+    amount,
+    connection.isConnected,
+    connection.publicKey,
+    isAdminMode,
+    isOpen,
+    recipient,
+  ]);
 
   const updateFiatEstimate = useCallback(async () => {
     const xlm = parseFloat(amount);
@@ -354,13 +369,20 @@ export default function StellarFiatModal({
   const handleAction = async () => {
     if (!connection.isConnected) return;
 
-    if (isAmountInvalid || !amount || stroopsAmount === null || stroopsAmount <= BigInt(0)) {
+    if (
+      isAmountInvalid ||
+      !amount ||
+      stroopsAmount === null ||
+      stroopsAmount <= BigInt(0)
+    ) {
       setErrorMsg('Invalid amount. Please enter a positive number.');
       setStatus('error');
       return;
     }
     if (isDepositFlow && isLoadingBridgeLimit) {
-      setErrorMsg('Still loading the current bridge limit. Please wait a moment.');
+      setErrorMsg(
+        'Still loading the current bridge limit. Please wait a moment.',
+      );
       setStatus('error');
       return;
     }
@@ -390,7 +412,10 @@ export default function StellarFiatModal({
       return;
     }
 
-    if (status === 'loading' || Date.now() - lastActionTimestamp < SUBMIT_COOLDOWN_MS) {
+    if (
+      status === 'loading' ||
+      Date.now() - lastActionTimestamp < SUBMIT_COOLDOWN_MS
+    ) {
       return;
     }
 
@@ -398,17 +423,19 @@ export default function StellarFiatModal({
     setLastActionTimestamp(Date.now());
     setErrorMsg('');
 
-    console.log(`[StellarFiatModal] Initiating ${isAdminMode ? 'withdraw' : 'deposit'} with idempotencyKey: ${idempotencyKey}`);
+    console.log(
+      `[StellarFiatModal] Initiating ${isAdminMode ? 'withdraw' : 'deposit'} with idempotencyKey: ${idempotencyKey}`,
+    );
 
     const onHashKnown = (hash: string) => {
       localStorage.setItem(
         PENDING_TX_KEY,
-        JSON.stringify({ 
-          hash, 
-          amount, 
-          isAdminMode, 
+        JSON.stringify({
+          hash,
+          amount,
+          isAdminMode,
           recipient,
-          idempotencyKey 
+          idempotencyKey,
         } satisfies PendingTxRecord),
       );
     };
@@ -637,7 +664,10 @@ export default function StellarFiatModal({
 
             {fiatEstimate && (
               <p className="theme-text-secondary text-xs -mt-2 mb-4">
-                ~= <span className="theme-text-primary font-medium">{fiatEstimate}</span>{' '}
+                ~={' '}
+                <span className="theme-text-primary font-medium">
+                  {fiatEstimate}
+                </span>{' '}
                 at current market rate
               </p>
             )}
@@ -693,7 +723,9 @@ export default function StellarFiatModal({
                     </span>
                   </div>
                   <div className="theme-border pt-2 mt-1 border-t flex justify-between text-xs font-semibold">
-                    <span className="theme-text-secondary">Total Network Fee</span>
+                    <span className="theme-text-secondary">
+                      Total Network Fee
+                    </span>
                     <span className="text-blue-400 font-mono">
                       {isLoadingFee
                         ? 'Calculating...'
@@ -724,7 +756,9 @@ export default function StellarFiatModal({
                 </div>
 
                 <div className="flex items-center justify-between text-xs mb-2">
-                  <span className="theme-text-secondary">On-chain per-deposit limit</span>
+                  <span className="theme-text-secondary">
+                    On-chain per-deposit limit
+                  </span>
                   <span className="theme-text-primary font-mono">
                     {isLoadingBridgeLimit
                       ? 'Loading...'
@@ -766,11 +800,13 @@ export default function StellarFiatModal({
                   </div>
                 )}
 
-                {isOverLimit && bridgeLimit !== null && stroopsAmount !== null && (
-                  <div className="theme-soft-danger mt-3 rounded-lg border px-3 py-2 text-[11px] leading-tight">
-                    Error: Amount exceeds the current bridge limit.
-                  </div>
-                )}
+                {isOverLimit &&
+                  bridgeLimit !== null &&
+                  stroopsAmount !== null && (
+                    <div className="theme-soft-danger mt-3 rounded-lg border px-3 py-2 text-[11px] leading-tight">
+                      Error: Amount exceeds the current bridge limit.
+                    </div>
+                  )}
               </div>
             )}
 
@@ -808,7 +844,10 @@ export default function StellarFiatModal({
               </div>
             )}
 
-            <div data-testid="wallet-info" className="theme-text-muted flex justify-between text-xs mb-6">
+            <div
+              data-testid="wallet-info"
+              className="theme-text-muted flex justify-between text-xs mb-6"
+            >
               <span>
                 Connected: {connection.address.slice(0, 8)}…
                 {connection.address.slice(-4)}
@@ -851,7 +890,10 @@ export default function StellarFiatModal({
                 type="button"
                 onClick={() => {
                   setAmount('100');
-                  setTxHash('MOCK' + Math.random().toString(36).substring(2, 10).toUpperCase());
+                  setTxHash(
+                    'MOCK' +
+                      Math.random().toString(36).substring(2, 10).toUpperCase(),
+                  );
                   setStatus('success');
                 }}
                 className="w-full text-[10px] text-gray-500 hover:text-blue-400 transition-colors py-1"

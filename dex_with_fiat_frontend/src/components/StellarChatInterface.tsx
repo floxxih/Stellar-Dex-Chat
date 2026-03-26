@@ -84,7 +84,13 @@ export default function StellarChatInterface() {
     setIsAdmin: setChatIsAdmin,
   } = useChat();
 
-  const { balance, limit, totalDeposited, loading: statsLoading, error: statsError } = useBridgeStats();
+  const {
+    balance,
+    limit,
+    totalDeposited,
+    loading: statsLoading,
+    error: statsError,
+  } = useBridgeStats();
 
   // Track viewport width to switch between sidebar and bottom-sheet
   useEffect(() => {
@@ -566,7 +572,7 @@ export default function StellarChatInterface() {
         )}
 
         {/* Bridge Stats Bar */}
-        {connection.isConnected && !isNetworkMismatch && (
+        {connection.isConnected && (
           <div
             className={`flex-shrink-0 py-2 px-4 text-xs ${
               isDarkMode
@@ -597,7 +603,10 @@ export default function StellarChatInterface() {
                 <span className="font-medium">
                   Total Deposited:{' '}
                   <span className="text-blue-400">
-                    {totalDeposited !== null ? stroopsToDisplay(totalDeposited) : '—'} XLM
+                    {totalDeposited !== null
+                      ? stroopsToDisplay(totalDeposited)
+                      : '—'}{' '}
+                    XLM
                   </span>
                 </span>
               </div>
