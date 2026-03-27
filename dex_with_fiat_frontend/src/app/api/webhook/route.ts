@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { telemetry } from '@/lib/telemetry';
 import { transferStore } from '@/lib/transferStore';
+import { env } from '@/lib/env';
 
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
+const PAYSTACK_SECRET_KEY = env.PAYSTACK_SECRET_KEY;
 
 export async function POST(request: NextRequest) {
   const traceContext = telemetry.extractTraceFromHeaders(request.headers);

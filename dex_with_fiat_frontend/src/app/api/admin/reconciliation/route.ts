@@ -10,7 +10,7 @@ export async function GET() {
     console.error('Error fetching reconciliation data:', error);
     return NextResponse.json(
       { error: 'Failed to fetch reconciliation data' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

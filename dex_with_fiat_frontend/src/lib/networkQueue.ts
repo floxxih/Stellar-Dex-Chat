@@ -33,7 +33,10 @@ function isNetworkError(error: unknown): boolean {
 }
 
 async function processQueue(): Promise<void> {
-  if (processing || (typeof window !== 'undefined' && !window.navigator.onLine)) {
+  if (
+    processing ||
+    (typeof window !== 'undefined' && !window.navigator.onLine)
+  ) {
     return;
   }
   processing = true;
@@ -74,7 +77,10 @@ export function getQueuedReadRequestsCount(): number {
   return queue.length;
 }
 
-export function withNetworkReadQueue<T>(task: () => Promise<T>, name?: string): Promise<T> {
+export function withNetworkReadQueue<T>(
+  task: () => Promise<T>,
+  name?: string,
+): Promise<T> {
   return new Promise<T>(async (resolve, reject) => {
     if (typeof window !== 'undefined' && !window.navigator.onLine) {
       const id = nextId++;
@@ -104,7 +110,9 @@ export function withNetworkReadQueue<T>(task: () => Promise<T>, name?: string): 
           reject,
           attempts: 1,
         });
-        console.warn(`Network read failed, queued request [${name || id}] for retry.`);
+        console.warn(
+          `Network read failed, queued request [${name || id}] for retry.`,
+        );
       } else {
         reject(error);
       }

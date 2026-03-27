@@ -24,7 +24,15 @@ const TOKEN_IDS: Record<string, string> = {
 };
 
 // Supported fiat currencies — exported so UI can reference the same list
-export const SUPPORTED_CURRENCIES = ['usd', 'eur', 'gbp', 'ngn', 'cad', 'aud', 'jpy'];
+export const SUPPORTED_CURRENCIES = [
+  'usd',
+  'eur',
+  'gbp',
+  'ngn',
+  'cad',
+  'aud',
+  'jpy',
+];
 
 // Cache for prices to avoid excessive API calls
 const priceCache: Map<string, TokenPriceData> = new Map();
@@ -99,11 +107,51 @@ function getFallbackPrices(
   vsCurrencies: string[],
 ): CryptoPrice {
   const fallbackPrices: CryptoPrice = {
-    XLM:  { usd: 0.11, eur: 0.10, gbp: 0.087, ngn: 180,    cad: 0.15, aud: 0.17, jpy: 16.5  },
-    ETH:  { usd: 4000, eur: 3700, gbp: 3200,  ngn: 6500000, cad: 5400, aud: 6200, jpy: 600000 },
-    STRK: { usd: 0.8,  eur: 0.74, gbp: 0.64,  ngn: 1300,    cad: 1.08, aud: 1.24, jpy: 120   },
-    USDC: { usd: 1,    eur: 0.92, gbp: 0.8,   ngn: 1650,    cad: 1.35, aud: 1.55, jpy: 150   },
-    USDT: { usd: 1,    eur: 0.92, gbp: 0.8,   ngn: 1650,    cad: 1.35, aud: 1.55, jpy: 150   },
+    XLM: {
+      usd: 0.11,
+      eur: 0.1,
+      gbp: 0.087,
+      ngn: 180,
+      cad: 0.15,
+      aud: 0.17,
+      jpy: 16.5,
+    },
+    ETH: {
+      usd: 4000,
+      eur: 3700,
+      gbp: 3200,
+      ngn: 6500000,
+      cad: 5400,
+      aud: 6200,
+      jpy: 600000,
+    },
+    STRK: {
+      usd: 0.8,
+      eur: 0.74,
+      gbp: 0.64,
+      ngn: 1300,
+      cad: 1.08,
+      aud: 1.24,
+      jpy: 120,
+    },
+    USDC: {
+      usd: 1,
+      eur: 0.92,
+      gbp: 0.8,
+      ngn: 1650,
+      cad: 1.35,
+      aud: 1.55,
+      jpy: 150,
+    },
+    USDT: {
+      usd: 1,
+      eur: 0.92,
+      gbp: 0.8,
+      ngn: 1650,
+      cad: 1.35,
+      aud: 1.55,
+      jpy: 150,
+    },
   };
 
   const result: CryptoPrice = {};
@@ -238,7 +286,11 @@ export async function fetchLockedQuote(
   amount: number,
   fiatCurrency: string = 'ngn',
 ): Promise<LockedQuote> {
-  const ngnAmount = await convertCryptoToFiat(tokenSymbol, amount, fiatCurrency);
+  const ngnAmount = await convertCryptoToFiat(
+    tokenSymbol,
+    amount,
+    fiatCurrency,
+  );
   const lockedAt = Date.now();
   return {
     ngnAmount,

@@ -9,18 +9,18 @@ import {
   rpc,
 } from '@stellar/stellar-sdk';
 import { stroopsToXlm } from '@/lib/stroops';
+import { env } from '@/lib/env';
 
 export { stroopsToXlm as stroopsToDisplay } from '@/lib/stroops';
 
 const RPC_URL =
-  process.env.NEXT_PUBLIC_STELLAR_RPC_URL ||
-  'https://soroban-testnet.stellar.org';
+  env.NEXT_PUBLIC_STELLAR_RPC_URL || 'https://soroban-testnet.stellar.org';
 const CONTRACT_ID =
-  process.env.NEXT_PUBLIC_FIAT_BRIDGE_CONTRACT ||
+  env.NEXT_PUBLIC_FIAT_BRIDGE_CONTRACT ||
   'CAWYXBN4PSVXD7NIYEWVFFIIIEUCC6PUN3IMG3J2WHKDB4NVIISMXBPR';
 // XLM SAC address — the token used by the bridge (stored on-chain after init)
 export const XLM_SAC_ID =
-  process.env.NEXT_PUBLIC_XLM_SAC_CONTRACT ||
+  env.NEXT_PUBLIC_XLM_SAC_CONTRACT ||
   'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC';
 
 // Stellar Testnet passphrase — switch to Networks.PUBLIC for mainnet
@@ -269,23 +269,23 @@ async function viewCall<T>(functionName: string): Promise<T> {
   // Use a dummy account (Stellar Foundation's well-known testnet account) for cls
   const contract = new Contract(CONTRACT_ID);
 
-    // We don't need a funded account — just a valid one for building the tx
-    let account;
-    try {
-      account = await server.getAccount(DUMMY_SOURCE);
-    } catch {
-      // If testnet doesn't know the account, create a skeleton account object
-      const { Account } = await import('@stellar/stellar-sdk');
-      account = new Account(DUMMY_SOURCE, '0');
-    }
+  // We don't need a funded account — just a valid one for building the tx
+  let account;
+  try {
+    account = await server.getAccount(DUMMY_SOURCE);
+  } catch {
+    // If testnet doesn't know the account, create a skeleton account object
+    const { Account } = await import('@stellar/stellar-sdk');
+    account = new Account(DUMMY_SOURCE, '0');
+  }
 
-    const tx = new TransactionBuilder(account, {
-      fee: BASE_FEE,
-      networkPassphrase: NETWORK_PASSPHRASE,
-    })
-      .addOperation(contract.call(functionName))
-      .setTimeout(30)
-      .build();
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(contract.call(functionName))
+    .setTimeout(30)
+    .build();
 
   const sim = await server.simulateTransaction(tx);
   if (rpc.Api.isSimulationError(sim)) {
@@ -314,7 +314,9 @@ export async function getBridgeLimit(): Promise<bigint> {
   return viewCall<bigint>('get_limit');
 }
 
-export async function validateBridgeAmountLimit(amount: bigint): Promise<bigint> {
+export async function validateBridgeAmountLimit(
+  amount: bigint,
+): Promise<bigint> {
   const limit = await getBridgeLimit();
 
   if (amount > limit) {
@@ -330,4 +332,3 @@ export async function validateBridgeAmountLimit(amount: bigint): Promise<bigint>
 export async function getTotalDeposited(): Promise<bigint> {
   return viewCall<bigint>('get_total_deposited');
 }
-

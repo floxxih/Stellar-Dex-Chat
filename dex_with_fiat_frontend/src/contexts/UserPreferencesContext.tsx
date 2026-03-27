@@ -8,16 +8,17 @@ const REMINDER_FREQUENCY_KEY = 'reminder-frequency';
 const DEFAULT_CURRENCY = 'usd';
 
 export const SUPPORTED_FIAT_CURRENCIES = [
-  { code: 'usd', label: 'USD — US Dollar',        symbol: '$'   },
-  { code: 'eur', label: 'EUR — Euro',              symbol: '€'   },
-  { code: 'gbp', label: 'GBP — British Pound',     symbol: '£'   },
-  { code: 'ngn', label: 'NGN — Nigerian Naira',    symbol: '₦'   },
-  { code: 'cad', label: 'CAD — Canadian Dollar',   symbol: 'CA$' },
-  { code: 'aud', label: 'AUD — Australian Dollar', symbol: 'A$'  },
-  { code: 'jpy', label: 'JPY — Japanese Yen',      symbol: '¥'   },
+  { code: 'usd', label: 'USD — US Dollar', symbol: '$' },
+  { code: 'eur', label: 'EUR — Euro', symbol: '€' },
+  { code: 'gbp', label: 'GBP — British Pound', symbol: '£' },
+  { code: 'ngn', label: 'NGN — Nigerian Naira', symbol: '₦' },
+  { code: 'cad', label: 'CAD — Canadian Dollar', symbol: 'CA$' },
+  { code: 'aud', label: 'AUD — Australian Dollar', symbol: 'A$' },
+  { code: 'jpy', label: 'JPY — Japanese Yen', symbol: '¥' },
 ] as const;
 
-export type FiatCurrencyCode = (typeof SUPPORTED_FIAT_CURRENCIES)[number]['code'];
+export type FiatCurrencyCode =
+  (typeof SUPPORTED_FIAT_CURRENCIES)[number]['code'];
 
 interface UserPreferencesContextType {
   fiatCurrency: FiatCurrencyCode;
@@ -29,9 +30,9 @@ interface UserPreferencesContextType {
   setReminderFrequency: (frequency: 'weekly' | 'monthly') => void;
 }
 
-const UserPreferencesContext = createContext<UserPreferencesContextType | undefined>(
-  undefined,
-);
+const UserPreferencesContext = createContext<
+  UserPreferencesContextType | undefined
+>(undefined);
 
 export function UserPreferencesProvider({
   children,
@@ -41,12 +42,19 @@ export function UserPreferencesProvider({
   const [fiatCurrency, setFiatCurrencyState] =
     useState<FiatCurrencyCode>(DEFAULT_CURRENCY);
   const [remindersEnabled, setRemindersEnabledState] = useState(false);
-  const [reminderFrequency, setReminderFrequencyState] = useState<'weekly' | 'monthly'>('weekly');
+  const [reminderFrequency, setReminderFrequencyState] = useState<
+    'weekly' | 'monthly'
+  >('weekly');
 
   // Restore saved preference on mount
   useEffect(() => {
-    const savedCurrency = localStorage.getItem(STORAGE_KEY) as FiatCurrencyCode | null;
-    if (savedCurrency && SUPPORTED_FIAT_CURRENCIES.some((c) => c.code === savedCurrency)) {
+    const savedCurrency = localStorage.getItem(
+      STORAGE_KEY,
+    ) as FiatCurrencyCode | null;
+    if (
+      savedCurrency &&
+      SUPPORTED_FIAT_CURRENCIES.some((c) => c.code === savedCurrency)
+    ) {
       setFiatCurrencyState(savedCurrency);
     }
 
@@ -55,7 +63,10 @@ export function UserPreferencesProvider({
       setRemindersEnabledState(savedReminders === 'true');
     }
 
-    const savedFrequency = localStorage.getItem(REMINDER_FREQUENCY_KEY) as 'weekly' | 'monthly' | null;
+    const savedFrequency = localStorage.getItem(REMINDER_FREQUENCY_KEY) as
+      | 'weekly'
+      | 'monthly'
+      | null;
     if (savedFrequency === 'weekly' || savedFrequency === 'monthly') {
       setReminderFrequencyState(savedFrequency);
     }
@@ -77,7 +88,8 @@ export function UserPreferencesProvider({
   };
 
   const currencySymbol =
-    SUPPORTED_FIAT_CURRENCIES.find((c) => c.code === fiatCurrency)?.symbol ?? '$';
+    SUPPORTED_FIAT_CURRENCIES.find((c) => c.code === fiatCurrency)?.symbol ??
+    '$';
 
   return (
     <UserPreferencesContext.Provider

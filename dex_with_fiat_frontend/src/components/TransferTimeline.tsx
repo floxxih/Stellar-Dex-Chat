@@ -8,7 +8,8 @@ export type TransferStatus =
   | 'pending'
   | 'success'
   | 'failed'
-  | 'reversed';
+  | 'reversed'
+  | 'cancelled';
 
 export interface StatusEvent {
   status: TransferStatus;
@@ -51,6 +52,11 @@ const STATUS_META: Record<
     icon: <RefreshCw className="w-4 h-4" />,
     color: 'text-purple-400 border-purple-400 bg-purple-400/10',
     defaultLabel: 'Transfer reversed',
+  },
+  cancelled: {
+    icon: <XCircle className="w-4 h-4" />,
+    color: 'text-gray-400 border-gray-400 bg-gray-400/10',
+    defaultLabel: 'Transfer cancelled',
   },
 };
 
@@ -104,7 +110,10 @@ export default function TransferTimeline({
           const isLast = idx === events.length - 1;
 
           return (
-            <li key={`${event.status}-${idx}`} className="flex items-start gap-3">
+            <li
+              key={`${event.status}-${idx}`}
+              className="flex items-start gap-3"
+            >
               {/* Status icon badge */}
               <span
                 className={`relative z-10 flex-shrink-0 w-9 h-9 rounded-full border flex items-center justify-center ${meta.color}`}

@@ -57,7 +57,9 @@ export default function ChatInput({
         setSelectedIndex((prev) => (prev + 1) % commands.length);
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setSelectedIndex((prev) => (prev - 1 + commands.length) % commands.length);
+        setSelectedIndex(
+          (prev) => (prev - 1 + commands.length) % commands.length,
+        );
       } else if (e.key === 'Enter') {
         e.preventDefault();
         selectCommand(commands[selectedIndex].cmd);
@@ -87,7 +89,9 @@ export default function ChatInput({
             className="absolute bottom-full left-6 mb-2 w-64 theme-surface border rounded-xl shadow-2xl overflow-hidden z-50"
           >
             <div className="p-2 border-b bg-gray-50/50">
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-2">Commands</span>
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-2">
+                Commands
+              </span>
             </div>
             {commands.map((c, i) => (
               <button
@@ -96,7 +100,9 @@ export default function ChatInput({
                 onClick={() => selectCommand(c.cmd)}
                 onMouseEnter={() => setSelectedIndex(i)}
                 className={`w-full flex flex-col items-start px-4 py-3 transition-colors ${
-                  i === selectedIndex ? 'bg-blue-50 border-l-4 border-blue-500' : 'hover:bg-gray-50 border-l-4 border-transparent'
+                  i === selectedIndex
+                    ? 'bg-blue-50 border-l-4 border-blue-500'
+                    : 'hover:bg-gray-50 border-l-4 border-transparent'
                 }`}
               >
                 <span className="font-bold text-sm text-gray-900">{c.cmd}</span>

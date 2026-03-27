@@ -34,7 +34,10 @@ declare global {
   }
 }
 
-async function getFreighterAccounts(): Promise<{ accounts: string[]; error?: string }> {
+async function getFreighterAccounts(): Promise<{
+  accounts: string[];
+  error?: string;
+}> {
   if (typeof window !== 'undefined' && window.freighter?.getAccounts) {
     return window.freighter.getAccounts();
   }
@@ -130,7 +133,9 @@ export function StellarWalletProvider({ children }: { children: ReactNode }) {
     const storedIndex = localStorage.getItem(STORAGE_KEY_INDEX);
     const storedTimestamp = localStorage.getItem(STORAGE_KEY_TIMESTAMP);
     if (stored && isFreighterInstalled) {
-      const connectionTime = storedTimestamp ? parseInt(storedTimestamp, 10) : 0;
+      const connectionTime = storedTimestamp
+        ? parseInt(storedTimestamp, 10)
+        : 0;
       const now = Date.now();
       if (now - connectionTime > SESSION_TTL_MS) {
         localStorage.removeItem(STORAGE_KEY_ADDRESS);
@@ -148,13 +153,17 @@ export function StellarWalletProvider({ children }: { children: ReactNode }) {
             const netResult = await getNetwork();
             const accountsResult = await getFreighterAccounts();
             if (!accountsResult.error && accountsResult.accounts.length > 0) {
-              const walletAccounts: WalletAccount[] = accountsResult.accounts.map((addr: string, idx: number) => ({
-                address: addr,
-                label: `Account ${idx + 1}`,
-              }));
+              const walletAccounts: WalletAccount[] =
+                accountsResult.accounts.map((addr: string, idx: number) => ({
+                  address: addr,
+                  label: `Account ${idx + 1}`,
+                }));
               setAccounts(walletAccounts);
               const savedIndex = storedIndex ? parseInt(storedIndex, 10) : 0;
-              const validIndex = Math.min(savedIndex, walletAccounts.length - 1);
+              const validIndex = Math.min(
+                savedIndex,
+                walletAccounts.length - 1,
+              );
               setSelectedAccountIndex(validIndex >= 0 ? validIndex : 0);
             }
             setConnection({
@@ -190,14 +199,19 @@ export function StellarWalletProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(STORAGE_KEY_TIMESTAMP, String(now));
 
       if (!accountsResult.error && accountsResult.accounts.length > 0) {
-        const walletAccounts: WalletAccount[] = accountsResult.accounts.map((a: string, idx: number) => ({
-          address: a,
-          label: `Account ${idx + 1}`,
-        }));
+        const walletAccounts: WalletAccount[] = accountsResult.accounts.map(
+          (a: string, idx: number) => ({
+            address: a,
+            label: `Account ${idx + 1}`,
+          }),
+        );
         setAccounts(walletAccounts);
         const currentIndex = accountsResult.accounts.indexOf(addr);
         setSelectedAccountIndex(currentIndex >= 0 ? currentIndex : 0);
-        localStorage.setItem(STORAGE_KEY_INDEX, String(currentIndex >= 0 ? currentIndex : 0));
+        localStorage.setItem(
+          STORAGE_KEY_INDEX,
+          String(currentIndex >= 0 ? currentIndex : 0),
+        );
       }
 
       setConnection({
@@ -244,75 +258,75 @@ export function StellarWalletProvider({ children }: { children: ReactNode }) {
       if (index < 0 || index >= accounts.length) return;
       const selectedAccount = accounts[index];
       try {
-      await setFreighterAllowedBack(selectedAccount.address);
-      setSelectedAccountIndex(index);
-      localStorage.setItem(STORAGE_KEY_INDEX, String(index));
-      setConnection((prev) => ({
-        ...prev,
-        address: selectedAccount.address,
-        publicKey: selectedAccount.address,
-      }));
-      localStorage.setItem(STORAGE_KEY_ADDRESS, selectedAccount.address);
-      localStorage.setItem(STORAGE_KEY_TIMESTAMP, String(Date.now()));
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Failed to switch account',
-      );
+        await setFreighterAllowedBack(selectedAccount.address);
+        setSelectedAccountIndex(index);
+        localStorage.setItem(STORAGE_KEY_INDEX, String(index));
+        setConnection((prev) => ({
+          ...prev,
+          address: selectedAccount.address,
+          publicKey: selectedAccount.address,
+        }));
+        localStorage.setItem(STORAGE_KEY_ADDRESS, selectedAccount.address);
+        localStorage.setItem(STORAGE_KEY_TIMESTAMP, String(Date.now()));
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : 'Failed to switch account',
+        );
+      }
+    },
+    [accounts],
+  );
+
+  const clearSessionExpired = useCallback(() => {
+    setSessionExpired(false);
+  }, []);
+
+  const mockConnect = useCallback((addr: string) => {
+    const connectionData = {
+      address: addr,
+      publicKey: addr,
+      isConnected: true,
+      network: 'TESTNET',
+      networkPassphrase: 'Test SDF Network ; September 2015',
+    };
+    setConnection(connectionData);
+    localStorage.setItem(STORAGE_KEY_ADDRESS, addr);
+    localStorage.setItem(STORAGE_KEY_TIMESTAMP, String(Date.now()));
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.mockStellarConnect = mockConnect;
     }
-  },
-  [accounts],
-);
+  }, [mockConnect]);
 
-const clearSessionExpired = useCallback(() => {
-  setSessionExpired(false);
-}, []);
+  const isNetworkMismatch =
+    connection.isConnected &&
+    connection.network !== '' &&
+    connection.network.toUpperCase() !== EXPECTED_NETWORK;
 
-const mockConnect = useCallback((addr: string) => {
-  const connectionData = {
-    address: addr,
-    publicKey: addr,
-    isConnected: true,
-    network: 'TESTNET',
-    networkPassphrase: 'Test SDF Network ; September 2015',
-  };
-  setConnection(connectionData);
-  localStorage.setItem(STORAGE_KEY_ADDRESS, addr);
-  localStorage.setItem(STORAGE_KEY_TIMESTAMP, String(Date.now()));
-}, []);
-
-useEffect(() => {
-  if (typeof window !== 'undefined') {
-    window.mockStellarConnect = mockConnect;
-  }
-}, [mockConnect]);
-
-const isNetworkMismatch =
-  connection.isConnected &&
-  connection.network !== '' &&
-  connection.network.toUpperCase() !== EXPECTED_NETWORK;
-
-return (
-  <StellarWalletContext.Provider
-    value={{
-      connection,
-      accounts,
-      selectedAccountIndex,
-      selectAccount,
-      connect,
-      disconnect,
-      signTx,
-      isFreighterInstalled,
-      isLoading,
-      error,
-      sessionExpired,
-      clearSessionExpired,
-      mockConnect,
-      isNetworkMismatch,
-    }}
-  >
-    {children}
-  </StellarWalletContext.Provider>
-);
+  return (
+    <StellarWalletContext.Provider
+      value={{
+        connection,
+        accounts,
+        selectedAccountIndex,
+        selectAccount,
+        connect,
+        disconnect,
+        signTx,
+        isFreighterInstalled,
+        isLoading,
+        error,
+        sessionExpired,
+        clearSessionExpired,
+        mockConnect,
+        isNetworkMismatch,
+      }}
+    >
+      {children}
+    </StellarWalletContext.Provider>
+  );
 }
 
 export function useStellarWallet() {

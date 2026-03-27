@@ -33,7 +33,7 @@ export default function ChatHistorySidebar({
     searchSessions,
     hasHistory,
   } = useChatHistory();
-  const { entries, exportEntries, clearEntries } = useTxHistory();
+  const { entries, exportEntries, clearEntries, updateEntry } = useTxHistory();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(
@@ -286,7 +286,9 @@ export default function ChatHistorySidebar({
                 </div>
                 {(entry.amount || entry.fiatAmount) && (
                   <p className="theme-text-muted text-[11px] mt-2">
-                    {entry.amount ? `${entry.amount} ${entry.asset || 'XLM'}` : ''}
+                    {entry.amount
+                      ? `${entry.amount} ${entry.asset || 'XLM'}`
+                      : ''}
                     {entry.amount && entry.fiatAmount ? ' · ' : ''}
                     {entry.fiatAmount
                       ? `${entry.fiatAmount} ${entry.fiatCurrency || 'NGN'}`
@@ -295,9 +297,39 @@ export default function ChatHistorySidebar({
                 )}
                 {entry.note && (
                   <p className="theme-text-primary text-xs mt-2">
-                    Note: <span className="theme-text-secondary">{entry.note}</span>
+                    Note:{' '}
+                    <span className="theme-text-secondary">{entry.note}</span>
                   </p>
                 )}
+                {entry.kind === 'payout' &&
+                  entry.status !== 'cancelled' &&
+                  entry.reference &&
+                  Date.now() - new Date(entry.createdAt).getTime() <
+                    2 * 60 * 1000 && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const res = await fetch(
+                            `/api/transfer-status/${entry.reference}`,
+                            { method: 'POST' },
+                          );
+                          const json = await res.json();
+                          if (json.success) {
+                            updateEntry(entry.id, {
+                              status: 'cancelled',
+                              message: 'Payout cancelled.',
+                            });
+                          }
+                        } catch (err) {
+                          console.error('Cancel error:', err);
+                        }
+                      }}
+                      className="mt-2 w-full flex items-center justify-center gap-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 py-1.5 rounded text-xs font-medium transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" /> Cancel Payout
+                    </button>
+                  )}
               </div>
             ))}
           </div>

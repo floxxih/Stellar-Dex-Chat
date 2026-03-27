@@ -8,10 +8,9 @@ import {
 import { telemetry } from '@/lib/telemetry';
 import { parseMessage, mergeParserWithAI } from '@/lib/messageParser';
 import { findFAQMatch } from './faq';
+import { env } from '@/lib/env';
 
-const genAI = new GoogleGenerativeAI(
-  process.env.NEXT_PUBLIC_GEMINI_API_KEY || '',
-);
+const genAI = new GoogleGenerativeAI(env.NEXT_PUBLIC_GEMINI_API_KEY || '');
 
 type GuardrailMatch = {
   category: GuardrailCategory;

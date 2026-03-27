@@ -103,7 +103,8 @@ export default function LandingPage() {
   const [heroVisible, setHeroVisible] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const contractAddress = 'CB4L7Q6M3N7Z6K4L2A3B5C6D7E8F9G0H1I2J3K4L5M6N7O8P9Q0R1S2T3U4V5W6X7Y8Z9'; // Replace with actual deployed address
+  const contractAddress =
+    'CB4L7Q6M3N7Z6K4L2A3B5C6D7E8F9G0H1I2J3K4L5M6N7O8P9Q0R1S2T3U4V5W6X7Y8Z9'; // Replace with actual deployed address
 
   useEffect(() => {
     setHeroVisible(true);
@@ -229,7 +230,8 @@ export default function LandingPage() {
           </h1>
 
           <p className="text-xl md:text-2xl text-gray-300 mb-12 max-w-3xl mx-auto leading-relaxed">
-            Convert Stellar Lumens (XLM) to fiat currency instantly through our AI-powered chat interface and Soroban smart contracts.
+            Convert Stellar Lumens (XLM) to fiat currency instantly through our
+            AI-powered chat interface and Soroban smart contracts.
           </p>
 
           {/* How It Works Steps */}
@@ -238,22 +240,34 @@ export default function LandingPage() {
               <div className="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
                 <span className="text-2xl font-bold text-blue-400">1</span>
               </div>
-              <h3 className="text-lg font-semibold text-white mb-2">Connect Freighter</h3>
-              <p className="text-gray-400 text-sm">Install and connect your Stellar wallet to get started</p>
+              <h3 className="text-lg font-semibold text-white mb-2">
+                Connect Freighter
+              </h3>
+              <p className="text-gray-400 text-sm">
+                Install and connect your Stellar wallet to get started
+              </p>
             </div>
             <div className="text-center">
               <div className="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
                 <span className="text-2xl font-bold text-blue-400">2</span>
               </div>
-              <h3 className="text-lg font-semibold text-white mb-2">Deposit XLM</h3>
-              <p className="text-gray-400 text-sm">Chat with AI to deposit XLM into the smart contract</p>
+              <h3 className="text-lg font-semibold text-white mb-2">
+                Deposit XLM
+              </h3>
+              <p className="text-gray-400 text-sm">
+                Chat with AI to deposit XLM into the smart contract
+              </p>
             </div>
             <div className="text-center">
               <div className="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
                 <span className="text-2xl font-bold text-blue-400">3</span>
               </div>
-              <h3 className="text-lg font-semibold text-white mb-2">Receive Fiat</h3>
-              <p className="text-gray-400 text-sm">Get fiat currency directly to your bank account</p>
+              <h3 className="text-lg font-semibold text-white mb-2">
+                Receive Fiat
+              </h3>
+              <p className="text-gray-400 text-sm">
+                Get fiat currency directly to your bank account
+              </p>
             </div>
           </div>
 
