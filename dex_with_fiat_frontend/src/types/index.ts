@@ -167,3 +167,24 @@ export interface FiatTransactionParams {
   transactionId: string;
   bankAccount?: BankAccount;
 }
+
+// Audit Logging Types
+export interface AuditEntry {
+  id: string;
+  timestamp: Date;
+  adminAddress: string;
+  actionType: 'deposit' | 'payout' | 'reconciliation' | 'user_update' | 'settings_change';
+  actionDescription: string;
+  txHash?: string;
+  metadata: Record<string, unknown>;
+  status: 'success' | 'failed' | 'pending';
+}
+
+export interface AuditLogFilter {
+  actionType?: AuditEntry['actionType'];
+  adminAddress?: string;
+  startDate?: Date;
+  endDate?: Date;
+  status?: AuditEntry['status'];
+  txHash?: string;
+}

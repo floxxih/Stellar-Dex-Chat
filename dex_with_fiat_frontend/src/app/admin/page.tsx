@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { ReconciliationRecord } from '@/types';
 import { aggregateDailyVolume, DailyMetric } from '@/lib/analytics';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
+import AuditTable from '@/components/AuditTable';
 import {
   AreaChart,
   Area,
@@ -175,6 +176,14 @@ export default function AdminDashboard() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Audit Log Section */}
+        <div className="mt-12">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
+            Audit Log
+          </h2>
+          <AuditTable />
         </div>
       </div>
     </div>
