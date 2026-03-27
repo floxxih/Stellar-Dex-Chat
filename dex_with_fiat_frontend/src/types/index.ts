@@ -10,6 +10,10 @@ export interface ChatMessage {
     confirmationRequired?: boolean;
     autoTriggerTransaction?: boolean;
     conversationCount?: number;
+    guardrail?: GuardrailResult;
+    lowConfidence?: boolean;
+    clarificationQuestion?: string;
+    requestStatus?: 'cancelled';
   };
 }
 
@@ -37,6 +41,22 @@ export interface TransactionData {
   recipient?: string;
   transactionId?: string;
   txHash?: string; // Transaction hash for completed transactions
+  note?: string;
+}
+
+export interface TransactionHistoryEntry {
+  id: string;
+  kind: 'deposit' | 'payout' | 'risk_warning';
+  status: 'pending' | 'completed' | 'warning' | 'failed' | 'cancelled';
+  amount?: string;
+  asset?: string;
+  fiatAmount?: string;
+  fiatCurrency?: string;
+  note?: string;
+  txHash?: string;
+  reference?: string;
+  message: string;
+  createdAt: Date;
 }
 
 export interface SuggestedAction {
@@ -48,10 +68,26 @@ export interface SuggestedAction {
     | 'check_portfolio'
     | 'market_rates'
     | 'learn_more'
-    | 'cancel';
+    | 'cancel'
+    | 'query';
   label: string;
   data?: Record<string, unknown>;
   priority?: boolean;
+}
+
+export type GuardrailCategory =
+  | 'unsupported_request'
+  | 'wallet_security'
+  | 'compliance_evasion'
+  | 'malicious_activity'
+  | 'financial_guarantee';
+
+export interface GuardrailResult {
+  triggered: boolean;
+  category: GuardrailCategory;
+  reason: string;
+  triggerCount?: number;
+  totalTriggerCount?: number;
 }
 
 export interface Token {
@@ -76,11 +112,13 @@ export interface AIAnalysisResult {
     | 'query'
     | 'portfolio'
     | 'technical_support'
+    | 'guardrail'
     | 'unknown';
   confidence: number;
   extractedData: Partial<TransactionData>;
   requiredQuestions: string[];
   suggestedResponse: string;
+  guardrail?: GuardrailResult;
 }
 
 // Paystack Types
@@ -97,6 +135,21 @@ export interface PaystackTransfer {
   recipientCode: string;
   reason: string;
   reference: string;
+}
+
+// Admin Reconciliation Types
+export interface ReconciliationRecord {
+  id: string;
+  depositTxHash: string;
+  depositAmount: string;
+  depositUser: string;
+  depositDate: string;
+  payoutId: string;
+  payoutAmount: string;
+  payoutRecipient: string;
+  payoutStatus: 'pending' | 'completed' | 'failed' | 'warning' | 'cancelled';
+  payoutDate: string;
+  status: 'matched' | 'unmatched' | 'error';
 }
 
 // Stellar Wallet

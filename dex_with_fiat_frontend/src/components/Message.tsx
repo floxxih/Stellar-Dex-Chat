@@ -118,6 +118,33 @@ export default function Message({ message, onActionClick }: MessageProps) {
                 minute: '2-digit',
               })}
             </div>
+            {message.metadata?.guardrail?.triggered && (
+              <div
+                className={`mt-3 inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs ${
+                  isDarkMode
+                    ? 'border-amber-700 bg-amber-950/40 text-amber-200'
+                    : 'border-amber-200 bg-amber-50 text-amber-800'
+                }`}
+              >
+                <AlertTriangle className="h-4 w-4" />
+                <span>
+                  Guardrail:{' '}
+                  {message.metadata.guardrail.category.replaceAll('_', ' ')}
+                </span>
+              </div>
+            )}
+            {message.metadata?.requestStatus === 'cancelled' && (
+              <div
+                className={`mt-3 inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs ${
+                  isDarkMode
+                    ? 'border-sky-700 bg-sky-950/40 text-sky-200'
+                    : 'border-sky-200 bg-sky-50 text-sky-800'
+                }`}
+              >
+                <AlertTriangle className="h-4 w-4" />
+                <span>Request cancelled by user.</span>
+              </div>
+            )}
             {message.metadata?.suggestedActions &&
               message.metadata.suggestedActions.length > 0 && (
                 <div
@@ -160,17 +187,17 @@ export default function Message({ message, onActionClick }: MessageProps) {
             {/* Transaction Data Preview */}
             {message.metadata?.transactionData && (
               <div
-                className={`mt-4 p-4 bg-gray-50 border border-gray-200 rounded-xl text-sm ${isUser ? 'text-right' : 'text-left'}`}
+                className={`theme-surface-muted theme-border mt-4 p-4 border rounded-xl text-sm ${isUser ? 'text-right' : 'text-left'}`}
               >
-                <div className="flex items-center space-x-2 text-gray-700 font-medium mb-3">
+                <div className="theme-text-primary flex items-center space-x-2 font-medium mb-3">
                   <Coins className="w-4 h-4" />
                   <span>Transaction Details</span>
                 </div>
-                <div className="space-y-2 text-gray-600">
+                <div className="theme-text-secondary space-y-2">
                   {message.metadata.transactionData.type && (
                     <div className="flex justify-between">
                       <span>Type:</span>
-                      <span className="text-gray-900 font-medium capitalize">
+                      <span className="theme-text-primary font-medium capitalize">
                         {message.metadata.transactionData.type}
                       </span>
                     </div>
@@ -178,7 +205,7 @@ export default function Message({ message, onActionClick }: MessageProps) {
                   {message.metadata.transactionData.tokenIn && (
                     <div className="flex justify-between">
                       <span>Token:</span>
-                      <span className="text-gray-900 font-medium">
+                      <span className="theme-text-primary font-medium">
                         {message.metadata.transactionData.tokenIn}
                       </span>
                     </div>
@@ -186,7 +213,7 @@ export default function Message({ message, onActionClick }: MessageProps) {
                   {message.metadata.transactionData.amountIn && (
                     <div className="flex justify-between">
                       <span>Amount:</span>
-                      <span className="text-gray-900 font-medium">
+                      <span className="theme-text-primary font-medium">
                         {message.metadata.transactionData.amountIn}
                       </span>
                     </div>
@@ -194,16 +221,24 @@ export default function Message({ message, onActionClick }: MessageProps) {
                   {message.metadata.transactionData.fiatAmount && (
                     <div className="flex justify-between">
                       <span>Fiat:</span>
-                      <span className="text-gray-900 font-medium">
+                      <span className="theme-text-primary font-medium">
                         {message.metadata.transactionData.fiatAmount}{' '}
                         {message.metadata.transactionData.fiatCurrency || 'USD'}
+                      </span>
+                    </div>
+                  )}
+                  {message.metadata.transactionData.note && (
+                    <div className="flex justify-between gap-3">
+                      <span>Note:</span>
+                      <span className="theme-text-primary font-medium">
+                        {message.metadata.transactionData.note}
                       </span>
                     </div>
                   )}
                 </div>
 
                 {message.metadata.confirmationRequired && (
-                  <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs">
+                  <div className="theme-soft-warning mt-3 p-3 border rounded-lg text-xs">
                     <div className="flex items-center space-x-2">
                       <AlertTriangle className="w-4 h-4" />
                       <span>This transaction requires your confirmation</span>
@@ -211,8 +246,18 @@ export default function Message({ message, onActionClick }: MessageProps) {
                   </div>
                 )}
 
+                {message.metadata.lowConfidence &&
+                  message.metadata.clarificationQuestion && (
+                    <div className="theme-soft-warning mt-3 p-3 border rounded-lg text-xs">
+                      <div className="flex items-center space-x-2">
+                        <AlertTriangle className="w-4 h-4" />
+                        <span>{message.metadata.clarificationQuestion}</span>
+                      </div>
+                    </div>
+                  )}
+
                 {!connection.isConnected && (
-                  <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-xs">
+                  <div className="theme-soft-danger mt-3 p-3 border rounded-lg text-xs">
                     <div className="flex items-center space-x-2">
                       <Link className="w-4 h-4" />
                       <span>Connect your wallet to proceed</span>

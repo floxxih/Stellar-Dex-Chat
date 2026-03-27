@@ -12,7 +12,8 @@
     "noEmit": true,
     "esModuleInterop": true,
     "module": "esnext",
-    "moduleResolution": "bundler",
+    "moduleResolution": "node",
+    "types": ["node"],
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
@@ -35,6 +36,12 @@
     ".next/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "tests",
+    "**/tests/**",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "**/e2e/**",
+    "playwright.config.ts"
   ]
 }

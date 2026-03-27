@@ -3,8 +3,9 @@ import { getPayoutProvider } from '@/lib/payout/providers/registry';
 import axios from 'axios';
 import { telemetry } from '@/lib/telemetry';
 import { applyRateLimit, getClientIp } from '@/lib/rateLimit';
+import { env } from '@/lib/env';
 
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
+const PAYSTACK_SECRET_KEY = env.PAYSTACK_SECRET_KEY;
 const RATE_LIMIT = { maxRequests: 5, windowMs: 60_000 };
 
 export async function POST(request: NextRequest) {

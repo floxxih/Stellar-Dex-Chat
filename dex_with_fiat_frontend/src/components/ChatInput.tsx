@@ -1,58 +1,251 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Send, Loader2 } from 'lucide-react';
-import { useTheme } from '@/contexts/ThemeContext';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
+  onCancelRequest?: () => void;
+  onNewChat?: () => void;
+  onOpenHistory?: () => void;
+  onOpenBridgeModal?: () => void;
   isLoading: boolean;
   placeholder?: string;
 }
 
 export default function ChatInput({
   onSendMessage,
+  onCancelRequest,
+  onNewChat,
+  onOpenHistory,
+  onOpenBridgeModal,
   isLoading,
   placeholder = 'Type your message...',
 }: ChatInputProps) {
   const [message, setMessage] = useState('');
-  const { isDarkMode } = useTheme();
+  const [showCommands, setShowCommands] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [showPalette, setShowPalette] = useState(false);
+  const [paletteQuery, setPaletteQuery] = useState('');
+  const [paletteIndex, setPaletteIndex] = useState(0);
+
+  const commands = [
+    { cmd: '/deposit', desc: 'Add funds to your Stellar account' },
+    { cmd: '/rates', desc: 'Check current market conversion rates' },
+    { cmd: '/portfolio', desc: 'View your asset balance and value' },
+    { cmd: '/help', desc: 'Get assistance with platform features' },
+  ];
+
+  const handleInputChange = (val: string) => {
+    setMessage(val);
+    if (val === '/') {
+      setShowCommands(true);
+      setSelectedIndex(0);
+    } else if (!val.startsWith('/') || val === '') {
+      setShowCommands(false);
+    }
+  };
+
+  const selectCommand = (cmd: string) => {
+    setMessage(cmd + ' ');
+    setShowCommands(false);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (message.trim() && !isLoading) {
       onSendMessage(message.trim());
       setMessage('');
+      setShowCommands(false);
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (showCommands) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev + 1) % commands.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedIndex(
+          (prev) => (prev - 1 + commands.length) % commands.length,
+        );
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        selectCommand(commands[selectedIndex].cmd);
+      } else if (e.key === 'Escape') {
+        setShowCommands(false);
+      }
+      return;
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit(e);
     }
   };
 
+  const paletteCommands = [
+    {
+      id: 'new_chat',
+      label: 'New Chat',
+      keywords: 'new chat clear',
+      run: () => onNewChat?.(),
+    },
+    {
+      id: 'switch_thread',
+      label: 'Switch Thread',
+      keywords: 'switch thread history',
+      run: () => onOpenHistory?.(),
+    },
+    {
+      id: 'open_bridge_modal',
+      label: 'Open Bridge Modal',
+      keywords: 'bridge modal deposit',
+      run: () => onOpenBridgeModal?.(),
+    },
+    {
+      id: 'cancel_request',
+      label: 'Cancel Pending Request',
+      keywords: 'cancel stop abort request',
+      run: () => onCancelRequest?.(),
+    },
+  ];
+
+  const normalizedQuery = paletteQuery.trim().toLowerCase();
+  const filteredPalette = paletteCommands.filter((cmd) => {
+    if (!normalizedQuery) {
+      return true;
+    }
+    return (
+      cmd.label.toLowerCase().includes(normalizedQuery) ||
+      cmd.keywords.includes(normalizedQuery)
+    );
+  });
+
+  const executePaletteCommand = (idx: number) => {
+    const selected = filteredPalette[idx];
+    if (!selected) {
+      return;
+    }
+    selected.run();
+    setShowPalette(false);
+    setPaletteQuery('');
+    setPaletteIndex(0);
+  };
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setShowPalette((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   return (
     <form
       onSubmit={handleSubmit}
-      className={`p-6 transition-colors duration-300 ${
-        isDarkMode ? 'bg-gray-900' : 'bg-white'
-      }`}
+      className="theme-surface p-6 transition-colors duration-300 relative"
     >
+      {showPalette && (
+        <div className="absolute inset-x-6 bottom-full mb-3 rounded-xl border theme-surface shadow-2xl z-50">
+          <div className="p-3 border-b">
+            <input
+              value={paletteQuery}
+              onChange={(e) => {
+                setPaletteQuery(e.target.value);
+                setPaletteIndex(0);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setPaletteIndex((prev) =>
+                    filteredPalette.length > 0
+                      ? (prev + 1) % filteredPalette.length
+                      : 0,
+                  );
+                } else if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setPaletteIndex((prev) =>
+                    filteredPalette.length > 0
+                      ? (prev - 1 + filteredPalette.length) %
+                        filteredPalette.length
+                      : 0,
+                  );
+                } else if (e.key === 'Enter') {
+                  e.preventDefault();
+                  executePaletteCommand(paletteIndex);
+                } else if (e.key === 'Escape') {
+                  setShowPalette(false);
+                }
+              }}
+              autoFocus
+              placeholder="Type a command..."
+              className="theme-input w-full rounded-lg px-3 py-2 text-sm"
+            />
+          </div>
+          <div className="max-h-56 overflow-y-auto py-1">
+            {filteredPalette.map((cmd, i) => (
+              <button
+                key={cmd.id}
+                type="button"
+                onClick={() => executePaletteCommand(i)}
+                className={`w-full text-left px-3 py-2 text-sm ${
+                  i === paletteIndex ? 'bg-blue-600 text-white' : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+                }`}
+              >
+                {cmd.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <AnimatePresence>
+        {showCommands && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className="absolute bottom-full left-6 mb-2 w-64 theme-surface border rounded-xl shadow-2xl overflow-hidden z-50"
+          >
+            <div className="p-2 border-b bg-gray-50/50">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-2">
+                Commands
+              </span>
+            </div>
+            {commands.map((c, i) => (
+              <button
+                key={c.cmd}
+                type="button"
+                onClick={() => selectCommand(c.cmd)}
+                onMouseEnter={() => setSelectedIndex(i)}
+                className={`w-full flex flex-col items-start px-4 py-3 transition-colors ${
+                  i === selectedIndex
+                    ? 'bg-blue-50 border-l-4 border-blue-500'
+                    : 'hover:bg-gray-50 border-l-4 border-transparent'
+                }`}
+              >
+                <span className="font-bold text-sm text-gray-900">{c.cmd}</span>
+                <span className="text-xs text-gray-500">{c.desc}</span>
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="flex items-end space-x-3">
         <div className="flex-1 relative">
           <textarea
             value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
+            onChange={(e) => handleInputChange(e.target.value)}
+            onKeyDown={handleKeyDown}
             placeholder={placeholder}
             disabled={isLoading}
-            className={`w-full resize-none border rounded-lg px-4 py-3 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed ${
-              isDarkMode
-                ? 'border-gray-600 bg-gray-800 text-gray-100 placeholder-gray-400 focus:border-blue-500'
-                : 'border-gray-300 bg-white text-gray-900 placeholder-gray-500 focus:border-blue-500'
-            }`}
+            className="theme-input w-full resize-none border rounded-lg px-4 py-3 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             rows={1}
             style={{
               minHeight: '48px',
@@ -70,7 +263,7 @@ export default function ChatInput({
         <button
           type="submit"
           disabled={!message.trim() || isLoading}
-          className="flex items-center justify-center w-12 h-12 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white rounded-lg transition-all duration-200 disabled:cursor-not-allowed transform hover:scale-105 disabled:hover:scale-100 shadow-lg"
+          className="theme-primary-button flex items-center justify-center w-12 h-12 disabled:bg-gray-300 text-white rounded-lg transition-all duration-200 disabled:cursor-not-allowed transform hover:scale-105 disabled:hover:scale-100 shadow-lg"
         >
           {isLoading ? (
             <Loader2 className="w-5 h-5 animate-spin" />
@@ -91,11 +284,7 @@ export default function ChatInput({
             key={index}
             type="button"
             onClick={() => setMessage(suggestion)}
-            className={`px-3 py-2 text-sm rounded-lg border transition-all duration-200 transform hover:scale-105 ${
-              isDarkMode
-                ? 'bg-gray-800 hover:bg-gray-700 text-gray-300 border-gray-600'
-                : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-200'
-            }`}
+            className="theme-secondary-button px-3 py-2 text-sm rounded-lg transition-all duration-200 transform hover:scale-105"
           >
             {suggestion}
           </button>

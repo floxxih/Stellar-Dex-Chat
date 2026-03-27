@@ -22,6 +22,8 @@ import {
   FileText,
   HelpCircle,
   MessageSquare,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -99,6 +101,10 @@ export default function LandingPage() {
   const [email, setEmail] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [heroVisible, setHeroVisible] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const contractAddress =
+    'CB4L7Q6M3N7Z6K4L2A3B5C6D7E8F9G0H1I2J3K4L5M6N7O8P9Q0R1S2T3U4V5W6X7Y8Z9'; // Replace with actual deployed address
 
   useEffect(() => {
     setHeroVisible(true);
@@ -106,6 +112,16 @@ export default function LandingPage() {
 
   const handleGetStarted = () => {
     router.push('/chat');
+  };
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(contractAddress);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy: ', err);
+    }
   };
 
   const handleEmailSubmit = (e: React.FormEvent) => {
@@ -208,66 +224,91 @@ export default function LandingPage() {
         >
           <h1 className="text-5xl md:text-7xl font-bold mb-6 leading-tight">
             <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-              Stellar
+              XLM-to-Fiat
             </span>{' '}
-            DeFi
-            <br />
-            <span className="text-gray-300">Made Simple</span>
+            Bridge
           </h1>
 
-          <p className="text-xl md:text-2xl text-gray-300 mb-8 max-w-3xl mx-auto leading-relaxed">
-            Deposit <span className="text-blue-400 font-semibold">XLM</span>{' '}
-            into a Soroban smart contract and convert to fiat instantly. All
-            through an AI-powered chat interface on the Stellar network.
+          <p className="text-xl md:text-2xl text-gray-300 mb-12 max-w-3xl mx-auto leading-relaxed">
+            Convert Stellar Lumens (XLM) to fiat currency instantly through our
+            AI-powered chat interface and Soroban smart contracts.
           </p>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
+          {/* How It Works Steps */}
+          <div className="grid md:grid-cols-3 gap-8 mb-12 max-w-4xl mx-auto">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-2xl font-bold text-blue-400">1</span>
+              </div>
+              <h3 className="text-lg font-semibold text-white mb-2">
+                Connect Freighter
+              </h3>
+              <p className="text-gray-400 text-sm">
+                Install and connect your Stellar wallet to get started
+              </p>
+            </div>
+            <div className="text-center">
+              <div className="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-2xl font-bold text-blue-400">2</span>
+              </div>
+              <h3 className="text-lg font-semibold text-white mb-2">
+                Deposit XLM
+              </h3>
+              <p className="text-gray-400 text-sm">
+                Chat with AI to deposit XLM into the smart contract
+              </p>
+            </div>
+            <div className="text-center">
+              <div className="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-2xl font-bold text-blue-400">3</span>
+              </div>
+              <h3 className="text-lg font-semibold text-white mb-2">
+                Receive Fiat
+              </h3>
+              <p className="text-gray-400 text-sm">
+                Get fiat currency directly to your bank account
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
             <button
               onClick={handleGetStarted}
               className="group flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 px-8 py-4 rounded-lg text-lg font-semibold transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-blue-500/25"
             >
               <Play className="w-5 h-5" />
-              <span>Launch DeFi Hub</span>
+              <span>Start Bridging</span>
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform duration-300" />
             </button>
 
-            <div className="flex items-center space-x-4 text-sm text-gray-400">
-              <div className="flex items-center space-x-2">
-                <CheckCircle className="w-4 h-4 text-green-400" />
-                <span>Non-custodial</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <CheckCircle className="w-4 h-4 text-green-400" />
-                <span>Soroban Powered</span>
-              </div>
-            </div>
+            <a
+              href="https://stellar.expert/explorer/testnet"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-gray-400 hover:text-blue-400 transition-colors duration-300 text-sm underline"
+            >
+              View on Stellar Expert →
+            </a>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-4xl mx-auto">
-            <div className="text-center">
-              <div className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent mb-2">
-                5s
-              </div>
-              <div className="text-sm text-gray-400">Stellar Ledger Time</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent mb-2">
-                &lt;30s
-              </div>
-              <div className="text-sm text-gray-400">Deposit Time</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent mb-2">
-                $0.001
-              </div>
-              <div className="text-sm text-gray-400">Avg. Gas Fee</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent mb-2">
-                99.9%
-              </div>
-              <div className="text-sm text-gray-400">Uptime</div>
+          {/* Contract Address */}
+          <div className="bg-gray-800/50 border border-gray-700/50 rounded-lg p-4 max-w-md mx-auto">
+            <p className="text-sm text-gray-400 mb-2">Smart Contract Address</p>
+            <div className="flex items-center justify-between">
+              <code className="text-blue-400 font-mono text-sm break-all flex-1 mr-2">
+                {contractAddress}
+              </code>
+              <button
+                onClick={copyToClipboard}
+                className="flex-shrink-0 p-1 hover:bg-gray-700 rounded transition-colors duration-200"
+                title="Copy to clipboard"
+              >
+                {copied ? (
+                  <Check className="w-4 h-4 text-green-400" />
+                ) : (
+                  <Copy className="w-4 h-4 text-gray-400" />
+                )}
+              </button>
             </div>
           </div>
         </div>

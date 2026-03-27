@@ -1,23 +1,74 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { AIAnalysisResult, TransactionData } from '@/types';
+import {
+  AIAnalysisResult,
+  GuardrailCategory,
+  GuardrailResult,
+  TransactionData,
+} from '@/types';
+import { telemetry } from '@/lib/telemetry';
+import { parseMessage, mergeParserWithAI } from '@/lib/messageParser';
+import { findFAQMatch } from './faq';
+import { env } from '@/lib/env';
 
-const genAI = new GoogleGenerativeAI(
-  process.env.NEXT_PUBLIC_GEMINI_API_KEY || '',
-);
+const genAI = new GoogleGenerativeAI(env.NEXT_PUBLIC_GEMINI_API_KEY || '');
+
+type GuardrailMatch = {
+  category: GuardrailCategory;
+  reason: string;
+};
 
 export class AIAssistant {
+  private static guardrailCounts: Record<GuardrailCategory, number> = {
+    unsupported_request: 0,
+    wallet_security: 0,
+    compliance_evasion: 0,
+    malicious_activity: 0,
+    financial_guarantee: 0,
+  };
+
   private model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  static readonly LOW_CONFIDENCE_THRESHOLD = 0.7;
 
   async analyzeUserMessage(
     message: string,
     context?: Record<string, unknown>,
   ): Promise<AIAnalysisResult> {
     try {
+      // 1. Check Guardrails
+      const guardrailMatch = this.classifyGuardrail(message);
+      if (guardrailMatch) {
+        return this.buildGuardrailResponse(guardrailMatch, message);
+      }
+
+      // 2. Check Local FAQ Knowledge Base (#51)
+      const faqMatch = findFAQMatch(message);
+      if (faqMatch) {
+        return {
+          intent: faqMatch.intent,
+          confidence: 0.98,
+          extractedData: {},
+          requiredQuestions: [],
+          suggestedResponse: faqMatch.answer,
+        };
+      }
+
+      // 3. Deterministic parser — runs before AI so numeric fields are reliable
+      const parserResult = parseMessage(message);
+
+      // 4. AI Analysis
       const prompt = this.buildAnalysisPrompt(message, context);
       const result = await this.model.generateContent(prompt);
       const response = result.response.text();
 
-      return this.parseAIResponse(response);
+      const aiResult = this.parseAIResponse(response);
+
+      // 5. Merge — parser takes precedence for numeric fields
+      aiResult.extractedData = mergeParserWithAI(
+        parserResult,
+        aiResult.extractedData,
+      );
+
+      return aiResult;
     } catch (error) {
       console.error('AI Analysis Error:', error);
       return {
@@ -27,6 +78,7 @@ export class AIAssistant {
         requiredQuestions: [],
         suggestedResponse:
           "I'm having trouble understanding your request. Could you please rephrase it?",
+        guardrail: undefined,
       };
     }
   }
@@ -48,7 +100,7 @@ User Message: "${message}"
 Context: ${context ? JSON.stringify(context) : 'None'}
 
 CORE CAPABILITIES:
-1. XLM to fiat conversions (XLM → NGN, USD, EUR) — Primary Focus
+1. XLM to fiat conversions (XLM → NGN, USD, EUR) - Primary Focus
 2. Stellar FiatBridge smart contract interactions (deposit, withdraw, check limits)
 3. Real-time XLM market rate analysis
 4. Transaction tracking on Stellar Expert (testnet)
@@ -66,12 +118,15 @@ EXTRACTION GUIDELINES:
 - Set intent to "fiat_conversion" only when user explicitly wants to deposit XLM or convert XLM to fiat
 - Set intent to "query" for questions, information requests, or casual conversation
 - Set intent to "portfolio" for XLM balance checks, asset inquiries about Stellar assets
+- Set intent to "guardrail" for unsupported requests or risky requests involving private keys, bypassing compliance, exploits, scams, or guaranteed returns
 - Set intent to "unknown" only if completely unclear
 - Always assume XLM when referring to tokens (we support XLM on Stellar)
+- If the user seems to want a conversion but amount, payout target, or currency is missing or ambiguous, keep intent as "fiat_conversion", set confidence below 0.7, and include one targeted follow-up question in "requiredQuestions"
+- When confidence is below 0.7, keep "suggestedResponse" focused on that single clarification instead of saying the transaction is ready
 
 Respond with a JSON object in this exact format:
 {
-    "intent": "fiat_conversion|query|portfolio|technical_support|unknown",
+    "intent": "fiat_conversion|query|portfolio|technical_support|guardrail|unknown",
   "confidence": 0.8,
   "extractedData": {
     "type": "fiat_conversion",
@@ -81,7 +136,12 @@ Respond with a JSON object in this exact format:
     "fiatCurrency": "NGN"
   },
   "requiredQuestions": ["What amount of XLM would you like to deposit/convert?"],
-  "suggestedResponse": "I'd be happy to help you convert your XLM to Nigerian Naira via the Stellar FiatBridge!"
+  "suggestedResponse": "I'd be happy to help you convert your XLM to Nigerian Naira via the Stellar FiatBridge!",
+  "guardrail": {
+    "triggered": false,
+    "category": "unsupported_request",
+    "reason": ""
+  }
 }
 
 EXAMPLE RESPONSES BY INTENT:
@@ -131,19 +191,175 @@ Be conversational and helpful. Ask clarifying questions when information is miss
 `;
   }
 
+  private classifyGuardrail(message: string): GuardrailMatch | null {
+    const normalized = message.toLowerCase();
+    const mentionsSupportedDomain =
+      /(xlm|stellar|soroban|freighter|wallet|fiat|deposit|withdraw|bank transfer|portfolio|contract|offramp|naira|ngn|usd|eur)/i.test(
+        message,
+      );
+
+    if (
+      /(seed phrase|secret phrase|private key|recovery phrase|mnemonic|passphrase|wallet secret)/i.test(
+        normalized,
+      )
+    ) {
+      return {
+        category: 'wallet_security',
+        reason:
+          'Request involves sensitive wallet credentials or recovery data.',
+      };
+    }
+
+    if (
+      /(bypass kyc|avoid kyc|skip kyc|evade aml|avoid aml|bypass compliance|sanction|launder|money laundering|wash trading|hide funds)/i.test(
+        normalized,
+      )
+    ) {
+      return {
+        category: 'compliance_evasion',
+        reason:
+          'Request appears to seek compliance evasion or illicit fund flows.',
+      };
+    }
+
+    if (
+      /(hack|exploit|drain|phish|steal|scam|spoof|backdoor|malware|keylogger|credential stuffing|rug pull)/i.test(
+        normalized,
+      )
+    ) {
+      return {
+        category: 'malicious_activity',
+        reason:
+          'Request appears to facilitate fraud, exploits, or other malicious activity.',
+      };
+    }
+
+    if (
+      /(guarantee profit|guaranteed profit|risk-free return|sure profit|double my money|insider tip|pump this|financial advice)/i.test(
+        normalized,
+      )
+    ) {
+      return {
+        category: 'financial_guarantee',
+        reason:
+          'Request asks for unsafe financial guarantees or promotional investment advice.',
+      };
+    }
+
+    if (
+      !mentionsSupportedDomain &&
+      /(write|build|book|plan|recommend|recipe|summarize|translate|homework|essay|poem|code|movie|weather|hotel|flight|calendar|email)/i.test(
+        normalized,
+      )
+    ) {
+      return {
+        category: 'unsupported_request',
+        reason: 'Request falls outside the Stellar conversion assistant scope.',
+      };
+    }
+
+    return null;
+  }
+
+  private buildGuardrailResponse(
+    match: GuardrailMatch,
+    message: string,
+  ): AIAnalysisResult {
+    const guardrail = this.recordGuardrailTrigger(match, message);
+
+    return {
+      intent: 'guardrail',
+      confidence: 0.99,
+      extractedData: {},
+      requiredQuestions: [],
+      suggestedResponse: this.buildSafeGuardrailTemplate(match.category),
+      guardrail,
+    };
+  }
+
+  private recordGuardrailTrigger(
+    match: GuardrailMatch,
+    message: string,
+  ): GuardrailResult {
+    AIAssistant.guardrailCounts[match.category] += 1;
+
+    const totalTriggerCount = Object.values(AIAssistant.guardrailCounts).reduce(
+      (sum, count) => sum + count,
+      0,
+    );
+
+    const traceId = telemetry.generateTraceId();
+    const spanId = telemetry.generateSpanId();
+
+    telemetry.logWithTrace('warn', 'AI guardrail triggered', traceId, spanId, {
+      category: match.category,
+      reason: match.reason,
+      triggerCount: AIAssistant.guardrailCounts[match.category],
+      totalTriggerCount,
+      messagePreview: message.slice(0, 120),
+    });
+
+    return {
+      triggered: true,
+      category: match.category,
+      reason: match.reason,
+      triggerCount: AIAssistant.guardrailCounts[match.category],
+      totalTriggerCount,
+    };
+  }
+
+  private buildSafeGuardrailTemplate(category: GuardrailCategory): string {
+    const categoryLine = {
+      unsupported_request:
+        'I can only help with Stellar wallet, XLM conversion, and fiat off-ramp tasks in this app.',
+      wallet_security:
+        'I can\u2019t process or help expose private keys, seed phrases, or recovery credentials.',
+      compliance_evasion:
+        'I can\u2019t help bypass KYC, AML, sanctions, or other compliance controls.',
+      malicious_activity:
+        'I can\u2019t assist with exploits, scams, phishing, or unauthorized access.',
+      financial_guarantee:
+        'I can\u2019t promise profits or provide unsafe guaranteed-return guidance.',
+    }[category];
+
+    return `**Request Blocked by Guardrails**
+
+${categoryLine}
+
+**What I can help with instead**
+- Deposit XLM into the Stellar FiatBridge flow
+- Check XLM market rates and conversion estimates
+- Explain how the Stellar offramp works
+- Help connect your Freighter wallet safely
+
+Choose one of the next actions below and I'll keep it moving.`;
+  }
+
   private parseAIResponse(response: string): AIAnalysisResult {
     try {
-      // Extract JSON from response
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
+        const extractedData = parsed.extractedData || {};
+        const requiredQuestions = Array.isArray(parsed.requiredQuestions)
+          ? parsed.requiredQuestions
+          : [];
+        const clarificationQuestion =
+          requiredQuestions[0] ||
+          this.buildClarificationQuestion(extractedData, parsed.intent);
+
         return {
           intent: parsed.intent || 'unknown',
           confidence: parsed.confidence || 0.5,
-          extractedData: parsed.extractedData || {},
-          requiredQuestions: parsed.requiredQuestions || [],
+          extractedData,
+          requiredQuestions:
+            parsed.confidence < AIAssistant.LOW_CONFIDENCE_THRESHOLD &&
+            clarificationQuestion
+              ? [clarificationQuestion]
+              : requiredQuestions,
           suggestedResponse:
             parsed.suggestedResponse || 'How can I help you today?',
+          guardrail: parsed.guardrail,
         };
       }
     } catch (error) {
@@ -158,6 +374,7 @@ Be conversational and helpful. Ask clarifying questions when information is miss
       suggestedResponse:
         response ||
         "How can I help you with your DeFi needs today? You can also say 'bridge tokens from Sepolia to Optimism' to use the CCIP bridge.",
+      guardrail: undefined,
     };
   }
 
@@ -182,6 +399,36 @@ Be helpful and specific about what you need.
       console.error('Failed to generate follow-up question:', error);
       return 'Could you provide more details about your request?';
     }
+  }
+
+  getClarificationQuestion(analysis: AIAnalysisResult): string {
+    return (
+      analysis.requiredQuestions[0] ||
+      this.buildClarificationQuestion(analysis.extractedData, analysis.intent)
+    );
+  }
+
+  private buildClarificationQuestion(
+    extractedData: Partial<TransactionData>,
+    intent: AIAnalysisResult['intent'],
+  ): string {
+    if (intent !== 'fiat_conversion') {
+      return 'Could you clarify what you want to do with your XLM transfer?';
+    }
+
+    if (!extractedData.amountIn && !extractedData.fiatAmount) {
+      return 'What amount of XLM would you like to deposit or what fiat amount should I target?';
+    }
+
+    if (!extractedData.fiatCurrency) {
+      return 'Which fiat currency should I prepare the payout in, like NGN, USD, or EUR?';
+    }
+
+    if (!extractedData.recipient) {
+      return 'Should I prepare this as a standard deposit for later payout review?';
+    }
+
+    return 'Could you confirm the last missing detail so I can prepare the correct transaction?';
   }
 
   async validateTransactionData(data: TransactionData): Promise<{
@@ -223,7 +470,7 @@ Be helpful and specific about what you need.
     const currentTime = new Date().toLocaleString();
     const estimatedCompletion = new Date(
       Date.now() + 15 * 60000,
-    ).toLocaleString(); // 15 minutes from now
+    ).toLocaleString();
 
     return `
 **STELLAR FIATBRIDGE CONVERSION RECEIPT**
@@ -268,7 +515,6 @@ Your financial freedom is our priority.
   }
 
   async generateMarketUpdate(tokenSymbol: string = 'XLM'): Promise<string> {
-    // In a real implementation, you'd fetch actual market data
     const mockPrice = tokenSymbol === 'ETH' ? 2850 : 1850;
     const mockChange = Math.random() > 0.5 ? '+' : '-';
     const mockPercent = (Math.random() * 5).toFixed(2);

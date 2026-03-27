@@ -1,16 +1,25 @@
 'use client';
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
-import { ChatMessage, AIAnalysisResult, TransactionData } from '@/types';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import {
+  ChatMessage,
+  AIAnalysisResult,
+  GuardrailCategory,
+  TransactionData,
+} from '@/types';
 import { AIAssistant } from '@/lib/aiAssistant';
 import { useStellarWallet } from '@/contexts/StellarWalletContext';
 import { useChatHistory } from './useChatHistory';
+import { perf } from '@/lib/perf';
 
 interface ConversationState {
   messageCount: number;
   hasUserCancelled: boolean;
   pendingTransactionData: TransactionData | null;
   shouldTriggerTransaction: boolean;
+  isAdmin: boolean;
+  awaitingClarification: boolean;
+  clarificationQuestion: string | null;
 }
 
 const useChat = () => {
@@ -30,6 +39,9 @@ const useChat = () => {
       hasUserCancelled: false,
       pendingTransactionData: null,
       shouldTriggerTransaction: false,
+      isAdmin: false,
+      awaitingClarification: false,
+      clarificationQuestion: null,
     },
   );
 
@@ -93,18 +105,44 @@ What would you like to do today? I'm here to make your XLM-to-fiat journey smoot
     [getInitialSuggestedActions, connection.isConnected],
   );
 
-  const [messages, setMessages] = useState<ChatMessage[]>([initialMessage]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const aiAssistant = useMemo(() => new AIAssistant(), []);
+  const activeRequestControllerRef = useRef<AbortController | null>(null);
+
+  const appendCancelledMessage = useCallback((content: string) => {
+    const cancelledMessage: ChatMessage = {
+      id: (Date.now() + 1).toString(),
+      role: 'assistant',
+      content,
+      timestamp: new Date(),
+      metadata: {
+        requestStatus: 'cancelled',
+      },
+    };
+    setMessages((prev: ChatMessage[]) => [...prev, cancelledMessage]);
+  }, []);
+
+  const cancelPendingRequest = useCallback(() => {
+    if (!activeRequestControllerRef.current || !isLoading) {
+      return;
+    }
+    activeRequestControllerRef.current.abort();
+    activeRequestControllerRef.current = null;
+    setIsLoading(false);
+    appendCancelledMessage(
+      'Request cancelled. No worries - you can send a new prompt when ready.',
+    );
+  }, [appendCancelledMessage, isLoading]);
 
   useEffect(() => {
     if (!isInitialized) {
       if (currentSession && currentSession.messages.length > 0) {
         setMessages(currentSession.messages);
       } else if (!currentSessionId) {
-        setMessages([initialMessage]);
-        createNewSession([initialMessage]);
+        setMessages([]);
+        createNewSession([]);
       }
       setIsInitialized(true);
     }
@@ -124,15 +162,22 @@ What would you like to do today? I'm here to make your XLM-to-fiat journey smoot
 
   const sendMessage = useCallback(
     async (content: string) => {
+      if (isLoading && activeRequestControllerRef.current) {
+        activeRequestControllerRef.current.abort();
+        activeRequestControllerRef.current = null;
+      }
+
       const isCancellation = /cancel|stop|no thanks|nevermind|abort/i.test(
         content,
       );
       if (isCancellation) {
-        setConversationState((prev) => ({
+        setConversationState((prev: ConversationState) => ({
           ...prev,
           hasUserCancelled: true,
           pendingTransactionData: null,
           shouldTriggerTransaction: false,
+          awaitingClarification: false,
+          clarificationQuestion: null,
         }));
       }
 
@@ -143,8 +188,10 @@ What would you like to do today? I'm here to make your XLM-to-fiat journey smoot
         timestamp: new Date(),
       };
 
-      setMessages((prev) => [...prev, userMessage]);
+      setMessages((prev: ChatMessage[]) => [...prev, userMessage]);
       setIsLoading(true);
+      const requestController = new AbortController();
+      activeRequestControllerRef.current = requestController;
 
       try {
         const conversationContext = {
@@ -152,15 +199,25 @@ What would you like to do today? I'm here to make your XLM-to-fiat journey smoot
           walletAddress: connection.address,
           previousMessages: messages
             .slice(-3)
-            .map((m) => ({ role: m.role, content: m.content })),
+            .map((m: ChatMessage) => ({ role: m.role, content: m.content })),
           messageCount: conversationState.messageCount,
           hasTransactionData: !!conversationState.pendingTransactionData,
         };
 
-        const analysis = await aiAssistant.analyzeUserMessage(
-          content,
-          conversationContext,
-        );
+        perf.mark('AI: Response');
+        const abortPromise = new Promise<never>((_, reject) => {
+          requestController.signal.addEventListener(
+            'abort',
+            () => reject(new DOMException('Request aborted', 'AbortError')),
+            { once: true },
+          );
+        });
+
+        const analysis = await Promise.race([
+          aiAssistant.analyzeUserMessage(content, conversationContext),
+          abortPromise,
+        ]);
+        perf.measure('AI: Response');
 
         const newMessageCount = conversationState.messageCount + 1;
         let shouldTriggerTransaction = false;
@@ -178,8 +235,15 @@ What would you like to do today? I'm here to make your XLM-to-fiat journey smoot
           (pendingTransactionData.tokenIn ||
             pendingTransactionData.amountIn ||
             pendingTransactionData.fiatAmount);
+        const needsClarification =
+          analysis.intent === 'fiat_conversion' &&
+          analysis.confidence < AIAssistant.LOW_CONFIDENCE_THRESHOLD;
+        const clarificationQuestion = needsClarification
+          ? aiAssistant.getClarificationQuestion(analysis)
+          : null;
 
         const shouldAutoTrigger =
+          !needsClarification &&
           !conversationState.hasUserCancelled &&
           (newMessageCount >= 5 ||
             (hasMinimalTransactionData &&
@@ -192,7 +256,12 @@ What would you like to do today? I'm here to make your XLM-to-fiat journey smoot
 
         let enhancedResponse = analysis.suggestedResponse;
 
+        if (needsClarification && clarificationQuestion) {
+          enhancedResponse = `**One quick clarification**: ${clarificationQuestion}`;
+        }
+
         if (
+          !needsClarification &&
           newMessageCount >= 3 &&
           hasMinimalTransactionData &&
           !conversationState.hasUserCancelled
@@ -201,6 +270,7 @@ What would you like to do today? I'm here to make your XLM-to-fiat journey smoot
 
 **Ready to Proceed**: I have the details needed for your conversion. Let me set this up for you to review and sign.`;
         } else if (
+          !needsClarification &&
           newMessageCount >= 4 &&
           !hasMinimalTransactionData &&
           !conversationState.hasUserCancelled
@@ -230,11 +300,14 @@ What would you like to do today? I'm here to make your XLM-to-fiat journey smoot
             "**Conversion Cancelled**\\n\\nNo problem! I've cancelled the transaction process. Feel free to start fresh whenever you're ready to convert crypto to fiat. I'm here to help whenever you need assistance.\\n\\nIs there anything else I can help you with today?";
         }
 
-        setConversationState((prev) => ({
+        setConversationState((prev: ConversationState) => ({
+          ...prev,
           messageCount: newMessageCount,
           hasUserCancelled: isCancellation ? true : prev.hasUserCancelled,
           pendingTransactionData,
           shouldTriggerTransaction,
+          awaitingClarification: needsClarification,
+          clarificationQuestion,
         }));
 
         const shouldShowTransactionData =
@@ -250,6 +323,7 @@ What would you like to do today? I'm here to make your XLM-to-fiat journey smoot
           content: enhancedResponse,
           timestamp: new Date(),
           metadata: {
+            guardrail: analysis.guardrail,
             transactionData: shouldShowTransactionData
               ? (analysis.extractedData as TransactionData)
               : undefined,
@@ -258,15 +332,19 @@ What would you like to do today? I'm here to make your XLM-to-fiat journey smoot
               messageCount: newMessageCount,
               hasTransactionData: !!pendingTransactionData,
               shouldAutoTrigger: !!shouldAutoTrigger,
+              isAdmin: conversationState.isAdmin,
+              lowConfidence: needsClarification,
             }),
             confirmationRequired:
               analysis.intent === 'fiat_conversion' || shouldTriggerTransaction,
             autoTriggerTransaction: shouldTriggerTransaction,
             conversationCount: newMessageCount,
+            lowConfidence: needsClarification,
+            clarificationQuestion: clarificationQuestion || undefined,
           },
         };
 
-        setMessages((prev) => [...prev, assistantMessage]);
+        setMessages((prev: ChatMessage[]) => [...prev, assistantMessage]);
 
         if (
           shouldTriggerTransaction &&
@@ -278,6 +356,9 @@ What would you like to do today? I'm here to make your XLM-to-fiat journey smoot
           }, 1000);
         }
       } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return;
+        }
         console.error('Chat error:', error);
         const errorMessage: ChatMessage = {
           id: (Date.now() + 1).toString(),
@@ -286,24 +367,37 @@ What would you like to do today? I'm here to make your XLM-to-fiat journey smoot
             'Sorry, I encountered an error processing your request. Please try again.',
           timestamp: new Date(),
         };
-        setMessages((prev) => [...prev, errorMessage]);
+        setMessages((prev: ChatMessage[]) => [...prev, errorMessage]);
       } finally {
-        setIsLoading(false);
+        if (activeRequestControllerRef.current === requestController) {
+          activeRequestControllerRef.current = null;
+          setIsLoading(false);
+        }
       }
     },
-    [aiAssistant, conversationState, connection, messages, onTransactionReady],
+    [
+      aiAssistant,
+      conversationState,
+      connection,
+      isLoading,
+      messages,
+      onTransactionReady,
+    ],
   );
 
   const clearChat = useCallback(() => {
-    setMessages([initialMessage]);
-    setConversationState({
+    setMessages([]);
+    setConversationState((prev: ConversationState) => ({
       messageCount: 0,
       hasUserCancelled: false,
       pendingTransactionData: null,
       shouldTriggerTransaction: false,
-    });
-    createNewSession([initialMessage]);
-  }, [initialMessage, createNewSession]);
+      isAdmin: prev.isAdmin,
+      awaitingClarification: false,
+      clarificationQuestion: null,
+    }));
+    createNewSession([]);
+  }, [createNewSession]);
 
   const loadChatSession = useCallback(
     (sessionId: string) => {
@@ -312,12 +406,15 @@ What would you like to do today? I'm here to make your XLM-to-fiat journey smoot
         setMessages(
           sessionMessages.length > 0 ? sessionMessages : [initialMessage],
         );
-        setConversationState({
+        setConversationState((prev: ConversationState) => ({
           messageCount: 0,
           hasUserCancelled: false,
           pendingTransactionData: null,
           shouldTriggerTransaction: false,
-        });
+          isAdmin: prev.isAdmin,
+          awaitingClarification: false,
+          clarificationQuestion: null,
+        }));
       }
     },
     [loadSession, initialMessage],
@@ -332,7 +429,7 @@ What would you like to do today? I'm here to make your XLM-to-fiat journey smoot
 
   useEffect(() => {
     if (isInitialized) {
-      setMessages((prevMessages) => {
+      setMessages((prevMessages: ChatMessage[]) => {
         if (prevMessages.length > 0 && prevMessages[0]?.id === '1') {
           const updatedMessages = [...prevMessages];
           updatedMessages[0] = {
@@ -358,9 +455,13 @@ What would you like to do today? I'm here to make your XLM-to-fiat journey smoot
     currentSessionId,
     conversationState,
     setTransactionReadyCallback,
+    cancelPendingRequest,
+    setIsAdmin: (isAdmin: boolean) => {
+      setConversationState((prev: ConversationState) => ({ ...prev, isAdmin }));
+    },
     addMessage: (message: ChatMessage) => {
       const newMessages = [...messages, message];
-      setMessages(newMessages);
+      setMessages((prev: ChatMessage[]) => [...prev, message]);
       // Update session with new messages
       updateCurrentSession(newMessages);
     },
@@ -374,6 +475,8 @@ function generateSuggestedActions(
     messageCount?: number;
     hasTransactionData?: boolean;
     shouldAutoTrigger?: boolean;
+    isAdmin?: boolean;
+    lowConfidence?: boolean;
   },
 ) {
   const actions = [];
@@ -381,6 +484,12 @@ function generateSuggestedActions(
   const messageCount = context?.messageCount || 0;
   const hasTransactionData = context?.hasTransactionData || false;
   const shouldAutoTrigger = context?.shouldAutoTrigger || false;
+  const isAdmin = context?.isAdmin || false;
+  const lowConfidence = context?.lowConfidence || false;
+
+  if (analysis.intent === 'guardrail' && analysis.guardrail) {
+    return generateGuardrailActions(analysis.guardrail.category, isConnected);
+  }
 
   if (shouldAutoTrigger && hasTransactionData) {
     actions.push({
@@ -397,7 +506,12 @@ function generateSuggestedActions(
     return actions;
   }
 
-  if (messageCount >= 3 && hasTransactionData && !shouldAutoTrigger) {
+  if (
+    messageCount >= 3 &&
+    hasTransactionData &&
+    !shouldAutoTrigger &&
+    !lowConfidence
+  ) {
     actions.push({
       id: 'proceed_now',
       type: 'confirm_fiat' as const,
@@ -421,7 +535,7 @@ function generateSuggestedActions(
       });
     }
 
-    if (!shouldAutoTrigger) {
+    if (!shouldAutoTrigger && !lowConfidence) {
       actions.push({
         id: 'proceed_conversion',
         type: 'confirm_fiat' as const,
@@ -460,6 +574,16 @@ function generateSuggestedActions(
     }
   }
 
+  // Admin-only actions
+  if (isAdmin) {
+    actions.push({
+      id: 'admin_withdraw',
+      type: 'confirm_fiat' as const,
+      label: '💰 Admin: Withdraw Funds',
+      data: { isWithdraw: true },
+    });
+  }
+
   if (analysis.intent === 'query') {
     const content = analysis.suggestedResponse?.toLowerCase() || '';
     const hasConversionKeywords = [
@@ -470,7 +594,7 @@ function generateSuggestedActions(
       'withdraw',
       'sell',
     ].some((keyword) => content.includes(keyword));
-    if (hasConversionKeywords) {
+    if (hasConversionKeywords && !lowConfidence) {
       actions.push(
         {
           id: 'start_conversion',
@@ -531,6 +655,46 @@ function generateSuggestedActions(
       },
     );
   }
+
+  return actions;
+}
+
+function generateGuardrailActions(
+  category: GuardrailCategory,
+  isWalletConnected: boolean,
+) {
+  const actions = [];
+
+  if (!isWalletConnected) {
+    actions.push({
+      id: 'guardrail_connect_wallet',
+      type: 'connect_wallet' as const,
+      label: 'Connect Freighter',
+    });
+  }
+
+  if (category === 'unsupported_request') {
+    actions.push({
+      id: 'guardrail_supported_question',
+      type: 'query' as const,
+      label: 'Show Supported Tasks',
+      data: {
+        query:
+          'What supported actions can you help me with in Stellar Dex Chat?',
+      },
+    });
+  }
+
+  actions.push({
+    id: 'guardrail_market_rates',
+    type: 'market_rates' as const,
+    label: 'Check XLM Rates',
+  });
+  actions.push({
+    id: 'guardrail_learn_more',
+    type: 'learn_more' as const,
+    label: 'How It Works',
+  });
 
   return actions;
 }
