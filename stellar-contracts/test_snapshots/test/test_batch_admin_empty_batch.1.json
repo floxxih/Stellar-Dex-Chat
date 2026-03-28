@@ -468,14 +468,17 @@
           "v0": {
             "topics": [
               {
-                "symbol": "batch_ok"
+                "u32": 1
               },
               {
-                "symbol": "v1"
+                "symbol": "batch_ok"
               }
             ],
             "data": {
               "vec": [
+                {
+                  "u32": 0
+                },
                 {
                   "u32": 0
                 },

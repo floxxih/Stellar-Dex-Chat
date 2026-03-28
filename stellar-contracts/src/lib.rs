@@ -14,6 +14,8 @@ pub const MIN_TTL: u32 = 518_400; // ~30 days
 pub const MAX_TTL: u32 = 535_680; // ~31 days
 const MAX_REFERENCE_LEN: u32 = 64;
 const WINDOW_LEDGERS: u32 = 17_280; // ~24 hours
+#[allow(dead_code)]
+const WITHDRAWAL_EXPIRY_WINDOW_LEDGERS: u32 = 17_280; // ~24 hours — reserved for future withdrawal expiry feature
 const MIN_TIMELOCK_DELAY: u32 = 34_560; // 48 hours
 const DEFAULT_INACTIVITY_THRESHOLD: u32 = 1_555_200; // ~3 months
 pub const EVENT_VERSION: u32 = 1;
@@ -177,6 +179,7 @@ pub struct BatchAdminOp {
 pub struct BatchResult {
     pub total_ops: u32,
     pub success_count: u32,
+    pub failure_count: u32,
     pub failed_index: Option<u32>,
 }
 
@@ -311,7 +314,7 @@ impl FiatBridge {
             .persistent()
             .set(&DataKey::DeployConfigHash, &config_hash);
         env.events().publish(
-            (Symbol::new(&env, "deploy_hash"), Symbol::new(&env, "v1")),
+            (EVENT_VERSION, Symbol::new(&env, "deploy_hash")),
             config_hash,
         );
 
@@ -491,9 +494,9 @@ impl FiatBridge {
         }
 
         env.events()
-            .publish((Symbol::new(&env, "deposit"), from), amount);
+            .publish((EVENT_VERSION, Symbol::new(&env, "deposit"), from), amount);
         env.events()
-            .publish((Symbol::new(&env, "rcpt_issd"), memo_hash), receipt_id);
+            .publish((EVENT_VERSION, Symbol::new(&env, "rcpt_issd"), memo_hash), receipt_id);
 
         Self::check_invariants(&env, &token)?;
 
@@ -580,7 +583,7 @@ impl FiatBridge {
 
         Self::check_invariants(&env, &token)?;
         env.events()
-            .publish((Symbol::new(&env, "withdraw"), to), amount);
+            .publish((EVENT_VERSION, Symbol::new(&env, "withdraw"), to), amount);
         Ok(())
     }
 
@@ -703,7 +706,7 @@ impl FiatBridge {
         Self::check_invariants(&env, &token)?;
 
         env.events().publish(
-            (Symbol::new(&env, "req_withdr"), to),
+            (EVENT_VERSION, Symbol::new(&env, "req_withdr"), to),
             (request_id, memo_hash),
         );
 
@@ -1064,7 +1067,7 @@ impl FiatBridge {
         admin.require_auth();
         env.storage().instance().set(&DataKey::Paused, &true);
         env.events()
-            .publish((Symbol::new(&env, "paused"), Symbol::new(&env, "v1")), ());
+            .publish((EVENT_VERSION, Symbol::new(&env, "paused")), ());
         Ok(())
     }
 
@@ -1077,7 +1080,7 @@ impl FiatBridge {
         admin.require_auth();
         env.storage().instance().set(&DataKey::Paused, &false);
         env.events()
-            .publish((Symbol::new(&env, "unpaused"), Symbol::new(&env, "v1")), ());
+            .publish((EVENT_VERSION, Symbol::new(&env, "unpaused")), ());
         Ok(())
     }
 
@@ -1166,7 +1169,7 @@ impl FiatBridge {
         };
 
         env.events().publish(
-            (Symbol::new(env, "slippage"), Symbol::new(env, "v1")),
+            (EVENT_VERSION, Symbol::new(env, "slippage")),
             slippage_bps as u32,
         );
 
@@ -1296,7 +1299,7 @@ impl FiatBridge {
             .instance()
             .set(&DataKey::NextActionID, &(id + 1));
         env.events().publish(
-            (Symbol::new(&env, "admin_action_queued"), action_type, id),
+            (EVENT_VERSION, Symbol::new(&env, "admin_action_queued"), action_type, id),
             action.target_ledger,
         );
         Ok(id)
@@ -1321,7 +1324,7 @@ impl FiatBridge {
             .persistent()
             .remove(&DataKey::QueuedAdminAction(id));
         env.events().publish(
-            (Symbol::new(&env, "admin_action_executed"), id),
+            (EVENT_VERSION, Symbol::new(&env, "admin_action_executed"), id),
             true, // success
         );
         env.storage()
@@ -1356,7 +1359,7 @@ impl FiatBridge {
             .persistent()
             .set(&DataKey::Denied(address.clone()), &true);
         env.events()
-            .publish((Symbol::new(&env, "deny_add"),), address);
+            .publish((EVENT_VERSION, Symbol::new(&env, "deny_add")), address);
         Ok(())
     }
 
@@ -1380,7 +1383,7 @@ impl FiatBridge {
             .set(&DataKey::OperatorHeartbeat(operator.clone()), &curr);
 
         env.events()
-            .publish((Symbol::new(&env, "heartbeat"), operator), curr);
+            .publish((EVENT_VERSION, Symbol::new(&env, "heartbeat"), operator), curr);
 
         Ok(())
     }
@@ -1432,7 +1435,7 @@ impl FiatBridge {
         );
 
         env.events().publish(
-            (Symbol::new(env, "nonce_inc"), operator.clone()),
+            (EVENT_VERSION, Symbol::new(env, "nonce_inc"), operator.clone()),
             current_nonce + 1,
         );
 
@@ -1465,7 +1468,7 @@ impl FiatBridge {
             .persistent()
             .remove(&DataKey::Denied(address.clone()));
         env.events()
-            .publish((Symbol::new(&env, "deny_rem"),), address);
+            .publish((EVENT_VERSION, Symbol::new(&env, "deny_rem")), address);
         Ok(())
     }
 
@@ -1503,7 +1506,7 @@ impl FiatBridge {
         env.storage().persistent().set(&key, &(current + amount));
 
         env.events()
-            .publish((Symbol::new(&env, "fee_accrue"), token), amount);
+            .publish((EVENT_VERSION, Symbol::new(&env, "fee_accrue"), token), amount);
         Ok(())
     }
 
@@ -1550,7 +1553,7 @@ impl FiatBridge {
 
         env.storage().persistent().set(&key, &(current - amount));
         env.events()
-            .publish((Symbol::new(&env, "fee_wdrw"), to), amount);
+            .publish((EVENT_VERSION, Symbol::new(&env, "fee_wdrw"), to), amount);
         Ok(())
     }
 
@@ -1574,7 +1577,7 @@ impl FiatBridge {
             token_client.transfer(&contract, &to, &current);
             env.storage().persistent().set(&key, &0i128);
             env.events()
-                .publish((Symbol::new(&env, "fee_wdrw"), to.clone()), current);
+                .publish((EVENT_VERSION, Symbol::new(&env, "fee_wdrw"), to.clone()), current);
         }
 
         Ok(())
@@ -1644,7 +1647,7 @@ impl FiatBridge {
         token_client.transfer(&env.current_contract_address(), &to, &amount);
 
         env.events()
-            .publish((Symbol::new(&env, "rescue"), token, to), amount);
+            .publish((EVENT_VERSION, Symbol::new(&env, "rescue"), token, to), amount);
         Ok(())
     }
 
@@ -1866,7 +1869,7 @@ impl FiatBridge {
             .instance()
             .set(&DataKey::WithdrawalQuota, &quota);
         env.events().publish(
-            (Symbol::new(&env, "quota_set"), Symbol::new(&env, "v1")),
+            (EVENT_VERSION, Symbol::new(&env, "quota_set")),
             quota,
         );
         Ok(())
@@ -1920,7 +1923,7 @@ impl FiatBridge {
             record.amount = 0;
             record.window_start = curr;
             env.events().publish(
-                (Symbol::new(env, "quota_reset"), Symbol::new(env, "v1")),
+                (EVENT_VERSION, Symbol::new(env, "quota_reset")),
                 (user.clone(), record.window_start),
             );
         }
@@ -2068,7 +2071,7 @@ impl FiatBridge {
         }
 
         env.events().publish(
-            (Symbol::new(&env, "migration"), Symbol::new(&env, "v1")),
+            (EVENT_VERSION, Symbol::new(&env, "migration")),
             (current_id, migrated_count),
         );
 
@@ -2100,50 +2103,21 @@ impl FiatBridge {
 
         let total_ops = operations.len();
         let mut success_count: u32 = 0;
-
-        let snapshot_cooldown: u32 = env
-            .storage()
-            .instance()
-            .get(&DataKey::CooldownLedgers)
-            .unwrap_or(0);
-        let snapshot_lock_period: u32 = env
-            .storage()
-            .instance()
-            .get(&DataKey::LockPeriod)
-            .unwrap_or(0);
-        let snapshot_quota: i128 = env
-            .storage()
-            .instance()
-            .get(&DataKey::WithdrawalQuota)
-            .unwrap_or(0);
-        let snapshot_anti_sandwich: u32 = env
-            .storage()
-            .instance()
-            .get(&DataKey::AntiSandwichDelay)
-            .unwrap_or(0);
+        let mut failure_count: u32 = 0;
+        let mut first_failed_index: Option<u32> = None;
 
         for (idx, op) in operations.iter().enumerate() {
             let result = Self::execute_single_admin_op(&env, &op);
             if result.is_err() {
-                env.storage()
-                    .instance()
-                    .set(&DataKey::CooldownLedgers, &snapshot_cooldown);
-                env.storage()
-                    .instance()
-                    .set(&DataKey::LockPeriod, &snapshot_lock_period);
-                env.storage()
-                    .instance()
-                    .set(&DataKey::WithdrawalQuota, &snapshot_quota);
-                env.storage()
-                    .instance()
-                    .set(&DataKey::AntiSandwichDelay, &snapshot_anti_sandwich);
-
                 env.events().publish(
-                    (Symbol::new(&env, "batch_fail"), Symbol::new(&env, "v1")),
+                    (EVENT_VERSION, Symbol::new(&env, "batch_fail")),
                     (idx as u32, total_ops),
                 );
-
-                return Err(Error::BatchOperationFailed);
+                failure_count += 1;
+                if first_failed_index.is_none() {
+                    first_failed_index = Some(idx as u32);
+                }
+                continue;
             }
             success_count += 1;
         }
@@ -2151,11 +2125,14 @@ impl FiatBridge {
         let batch_result = BatchResult {
             total_ops,
             success_count,
-            failed_index: None,
+            failure_count,
+            failed_index: first_failed_index,
         };
 
         env.events().publish(
             (Symbol::new(&env, "batch_ok"), Symbol::new(&env, "v1")),
+            (success_count, failure_count, total_ops),
+            (EVENT_VERSION, Symbol::new(&env, "batch_ok")),
             (success_count, total_ops),
         );
 
@@ -2267,7 +2244,7 @@ impl FiatBridge {
             .instance()
             .set(&DataKey::CircuitBreakerTripped, &false);
         env.events().publish(
-            (Symbol::new(&env, "cb_reset"), Symbol::new(&env, "v1")),
+            (EVENT_VERSION, Symbol::new(&env, "cb_reset")),
             env.ledger().sequence(),
         );
         Ok(())
@@ -2341,7 +2318,7 @@ impl FiatBridge {
                 .instance()
                 .set(&DataKey::CircuitBreakerTripped, &true);
             env.events().publish(
-                (Symbol::new(env, "cbtripped"), Symbol::new(env, "v1")),
+                (EVENT_VERSION, Symbol::new(env, "cbtripped")),
                 (new_total, threshold),
             );
         }

@@ -140,7 +140,7 @@ export default function StellarFiatModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, connection.isConnected, connection.publicKey]);
+  }, [isOpen, connection.isConnected, connection.publicKey, connection.network]);
 
   const handleCopyHash = () => {
     if (!txHash) return;
