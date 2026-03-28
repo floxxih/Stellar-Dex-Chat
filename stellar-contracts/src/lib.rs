@@ -39,6 +39,7 @@ pub enum Error {
     NoEmergencyRecoveryAddress = 19,
     InactivityThresholdNotReached = 20,
     InvalidRecipient = 21,
+    AntiSandwichDelayActive = 22,
 }
 
 // ── Models ────────────────────────────────────────────────────────────────
@@ -100,6 +101,7 @@ pub struct ConfigSnapshot {
     pub inactivity_threshold: u32,
     pub allowlist_enabled: bool,
     pub emergency_recovery: Option<Address>,
+    pub anti_sandwich_delay: u32,
 }
 
 // ── Storage keys ──────────────────────────────────────────────────────────
@@ -135,6 +137,7 @@ pub enum DataKey {
     Oracle,
     FiatLimit,
     UserDailyVolume(Address),
+    AntiSandwichDelay,
 }
 
 const ORACLE_PRICE_DECIMALS: i128 = 10_000_000;
@@ -169,10 +172,10 @@ impl FiatBridge {
         env.storage().instance().set(&DataKey::NextActionID, &0u64);
         env.storage()
             .instance()
-            .set(&DataKey::LastAdminActionLedger, &env.ledger().sequence());
+            .set(&DataKey::InactivityThreshold, &DEFAULT_INACTIVITY_THRESHOLD);
         env.storage()
             .instance()
-            .set(&DataKey::InactivityThreshold, &DEFAULT_INACTIVITY_THRESHOLD);
+            .set(&DataKey::AntiSandwichDelay, &0u32);
 
         env.storage().instance().extend_ttl(MIN_TTL, MAX_TTL);
         Ok(())
@@ -195,24 +198,33 @@ impl FiatBridge {
             return Err(Error::ReferenceTooLong);
         }
 
-        // Cooldown
+        // Last Deposit Record (for Cooldown and Anti-Sandwich)
+        let key = DataKey::LastDeposit(from.clone());
+        let current_ledger = env.ledger().sequence();
         let cooldown: u32 = env
             .storage()
             .instance()
             .get(&DataKey::CooldownLedgers)
             .unwrap_or(0);
+        let anti_sandwich: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::AntiSandwichDelay)
+            .unwrap_or(0);
+
         if cooldown > 0 {
-            let key = DataKey::LastDeposit(from.clone());
             if let Some(last) = env.storage().temporary().get::<DataKey, u32>(&key) {
-                if env.ledger().sequence() < last.saturating_add(cooldown) {
+                if current_ledger < last.saturating_add(cooldown) {
                     return Err(Error::CooldownActive);
                 }
             }
-            env.storage()
-                .temporary()
-                .set(&key, &env.ledger().sequence());
-            env.storage().temporary().extend_ttl(&key, 5, 5);
         }
+
+        env.storage().temporary().set(&key, &current_ledger);
+        let max_delay = cooldown.max(anti_sandwich).max(1);
+        env.storage()
+            .temporary()
+            .extend_ttl(&key, max_delay, max_delay + 100);
 
         // Allowlist
         let allowlist_on: bool = env
@@ -462,6 +474,24 @@ impl FiatBridge {
             return Err(Error::WithdrawalLocked);
         }
 
+        // Anti-sandwich check
+        let delay: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::AntiSandwichDelay)
+            .unwrap_or(0);
+        if delay > 0 {
+            if let Some(last_deposit) = env
+                .storage()
+                .temporary()
+                .get::<_, u32>(&DataKey::LastDeposit(request.to.clone()))
+            {
+                if env.ledger().sequence() < last_deposit.saturating_add(delay) {
+                    return Err(Error::AntiSandwichDelayActive);
+                }
+            }
+        }
+
         let token_client = token::Client::new(&env, &request.token);
         let balance = token_client.balance(&env.current_contract_address());
 
@@ -615,6 +645,19 @@ impl FiatBridge {
             .ok_or(Error::NotInitialized)?;
         admin.require_auth();
         env.storage().instance().set(&DataKey::LockPeriod, &ledgers);
+        Ok(())
+    }
+
+    pub fn set_anti_sandwich_delay(env: Env, ledgers: u32) -> Result<(), Error> {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)?;
+        admin.require_auth();
+        env.storage()
+            .instance()
+            .set(&DataKey::AntiSandwichDelay, &ledgers);
         Ok(())
     }
 
@@ -848,6 +891,13 @@ impl FiatBridge {
         env.storage().temporary().get(&DataKey::LastDeposit(user))
     }
 
+    pub fn get_anti_sandwich_delay(env: Env) -> u32 {
+        env.storage()
+            .instance()
+            .get(&DataKey::AntiSandwichDelay)
+            .unwrap_or(0)
+    }
+
     pub fn get_total_withdrawn(env: Env) -> i128 {
         let tok = env
             .storage()
@@ -915,6 +965,11 @@ impl FiatBridge {
                 .storage()
                 .instance()
                 .get(&DataKey::EmergencyRecoveryAddress),
+            anti_sandwich_delay: env
+                .storage()
+                .instance()
+                .get(&DataKey::AntiSandwichDelay)
+                .unwrap_or(0),
         })
     }
 }
