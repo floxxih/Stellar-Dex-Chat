@@ -1515,6 +1515,16 @@ impl FiatBridge {
             .get(&DataKey::WithdrawCooldownThreshold)
             .unwrap_or(0)
     }
+    pub fn get_receipt_by_index(env: Env, idx: u64) -> Option<Receipt> {
+        let receipt_hash: BytesN<32> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::ReceiptIndex(idx))?;
+        env.storage()
+            .persistent()
+            .get(&DataKey::Receipt(receipt_hash))
+    }
+
     pub fn get_withdrawal_request(env: Env, id: u64) -> Option<WithdrawRequest> {
         env.storage().persistent().get(&DataKey::WithdrawQueue(id))
     }
