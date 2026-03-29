@@ -2898,6 +2898,26 @@ fn test_escrow_partial_migration_preserves_count() {
     assert_eq!(escrow_total, expected_total);
 }
 
+// ── Issue #109: withdraw self-address guard tests ─────────────────────────
+
+#[test]
+fn test_withdraw_to_self_address_rejected() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (contract_id, bridge, _, token_addr, _, token_sac) = setup_bridge(&env, 10_000);
+    let user = Address::generate(&env);
+    token_sac.mint(&user, &1_000);
+
+    // Deposit so the contract has a balance to withdraw from
+    bridge.deposit(&user, &500, &token_addr, &Bytes::new(&env), &0, &0, &None);
+
+    // Attempt to withdraw to the contract's own address — should be rejected
+    let result = bridge.try_withdraw(&contract_id, &100, &token_addr);
+    assert_eq!(result, Err(Ok(Error::InvalidRecipient)));
+
+    // Withdrawing to a regular user address must still succeed
+    bridge.withdraw(&user, &100, &token_addr);
 // ── Issue #111: TotalDeposited accumulator overflow guard tests ──────────
 
 #[test]

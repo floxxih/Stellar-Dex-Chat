@@ -579,6 +579,11 @@ impl FiatBridge {
             return Err(Error::ZeroAmount);
         }
 
+        // ── Issue #109: prevent tokens from being locked inside the contract ──
+        if to == env.current_contract_address() {
+            return Err(Error::InvalidRecipient);
+        }
+
         Self::enforce_withdrawal_quota(&env, &to, amount)?;
         // ── Issue #209: circuit breaker check ────────────────────────────
         Self::check_and_update_circuit_breaker(&env, amount)?;
