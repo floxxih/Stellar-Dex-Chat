@@ -404,8 +404,7 @@ export default function ChatHistorySidebar({
       <div className={`theme-border border-t p-4 ${isCollapsed ? 'flex flex-col items-center' : ''}`}>
         <PriceTicker symbols={['XLM', 'ETH', 'BTC']} currency="usd" />
 
-        <div className={`theme-border border-t p-4 ${isCollapsed ? 'flex flex-col items-center' : ''}`}>
-          <div className={`flex items-center justify-between mb-3 w-full ${isCollapsed ? 'flex-col gap-3' : ''}`}>
+        <div className={`flex items-center justify-between mb-3 w-full ${isCollapsed ? 'flex-col gap-3' : ''}`}>
           <div className="flex items-center gap-2">
             <Coins className="w-4 h-4 text-[var(--color-primary)]" />
             {!isCollapsed && (
@@ -556,7 +555,6 @@ export default function ChatHistorySidebar({
           </div>
         </div>
       )}
-    </div>
     </div>
   );
 }
