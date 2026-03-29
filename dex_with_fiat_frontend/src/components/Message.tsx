@@ -170,10 +170,14 @@ export default function Message({ message, onActionClick, onRetry, shouldAnimate
                           </a>
                         );
                       },
-                      img: ({ src, alt }: { src?: string; alt?: string }) => {
-                        const safeSrc = sanitizeUrl(src);
+                      img: (props: React.ImgHTMLAttributes<HTMLImageElement> & { src?: string | Blob }) => {
+                        const { src, alt, ...rest } = props;
+                        const srcStr = typeof src === 'string' ? src : undefined;
+                        const safeSrc = sanitizeUrl(srcStr);
+                        void rest;
                         if (safeSrc === '#blocked') return null;
                         return (
+                          // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={safeSrc}
                             alt={alt ?? ''}
