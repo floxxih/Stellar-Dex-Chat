@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
 
     if (!validationResult.success) {
       telemetry.addLog(span.spanId, 'warn', 'Zod validation failed', {
-        errors: validationResult.error.errors,
+        errors: validationResult.error.issues,
       });
       telemetry.finishSpan(span.spanId, {
         success: false,
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           message: 'Validation failed',
-          errors: validationResult.error.errors,
+          errors: validationResult.error.issues,
         },
         { status: 400 },
       );

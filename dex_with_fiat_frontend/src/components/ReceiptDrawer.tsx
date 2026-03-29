@@ -14,9 +14,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTransactionFilters } from '@/hooks/useTransactionFilters';
 import { FilterChipBar } from './filters/FilterChipBar';
-import TransactionAmountDisplay from './TransactionAmountDisplay';
 import { TransactionAmountDisplay } from './TransactionAmountDisplay';
-import { FilterChipBar } from './filters/FilterChipBar';
 
 interface ReceiptDrawerProps {
   isOpen: boolean;
@@ -54,23 +52,32 @@ export default function ReceiptDrawer({
     // CSV headers and data
     const headers = [
       'Receipt ID (hex)',
-      'Depositor',
+      'Receipt ID',
+      'Type',
+      'Status',
       'Amount',
-      'Token',
-      'Ledger',
+      'Asset',
+      'Fiat Amount',
+      'Fiat Currency',
       'Reference',
-      'Refunded',
-      'Memo Hash',
+      'Tx Hash',
+      'Note',
+      'Created At',
     ];
     const row = [
       transaction.id,
-      transaction.from || 'N/A',
-      transaction.amount,
-      transaction.asset,
-      transaction.ledger || 'N/A',
+      transaction.kind || 'N/A',
+      transaction.status || 'N/A',
+      transaction.amount || 'N/A',
+      transaction.asset || 'N/A',
+      transaction.fiatAmount || 'N/A',
+      transaction.fiatCurrency || 'N/A',
       transaction.reference || 'N/A',
-      transaction.refunded ? 'true' : 'false',
-      transaction.memoHash || 'N/A',
+      transaction.txHash || 'N/A',
+      transaction.note || 'N/A',
+      transaction.createdAt
+        ? new Date(transaction.createdAt).toISOString()
+        : 'N/A',
     ];
 
     // Escape CSV values
