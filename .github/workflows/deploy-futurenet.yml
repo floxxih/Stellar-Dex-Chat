@@ -59,29 +59,12 @@ jobs:
           FUTURENET_NETWORK_PASSPHRASE: 'Test SDF Future Network ; April 2020'
           OUTPUT_FILE: ./contract_id_futurenet.txt
         run: |
-          if [ -z "$FUTURENET_ADMIN_SECRET_KEY" ]; then
-            echo "❌ FUTURENET_ADMIN_SECRET_KEY secret not configured"
-            exit 1
-          fi
+          chmod +x ../scripts/deploy_fiat_bridge_futurenet.sh
+          ../scripts/deploy_fiat_bridge_futurenet.sh
           
-          echo "🚀 Deploying FiatBridge to Futurenet..."
-          
-          # Deploy the contract
-          CONTRACT_ID=$(soroban contract deploy \
-            --wasm "target/wasm32-unknown-unknown/release/stellar_contracts.wasm" \
-            --secret-key "$FUTURENET_ADMIN_SECRET_KEY" \
-            --network "futurenet" \
-            --rpc-url "$FUTURENET_RPC_URL" \
-            --network-passphrase "$FUTURENET_NETWORK_PASSPHRASE" 2>&1 | grep -oP "Contract ID: \K[A-Z0-9]+" || true)
-          
-          if [ -z "$CONTRACT_ID" ]; then
-            echo "❌ Failed to deploy contract"
-            exit 1
-          fi
-          
-          echo "✅ Contract deployed successfully!"
+          # Pass outputs to GitHub Actions context
+          CONTRACT_ID=$(cat "$OUTPUT_FILE")
           echo "contract_id=$CONTRACT_ID" >> $GITHUB_OUTPUT
-          echo "$CONTRACT_ID" > "$OUTPUT_FILE"
 
       - name: Upload contract ID artifact
         if: success()
