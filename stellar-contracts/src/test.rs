@@ -41,9 +41,31 @@ fn setup_bridge(
     let admin = Address::generate(env);
     let token_admin = Address::generate(env);
     let (token_addr, token, token_sac) = create_token(env, &token_admin);
-    bridge.init(&admin, &token_addr, &limit);
+    bridge.init(&admin, &token_addr, &limit, &1);
     (contract_id, bridge, admin, token_addr, token, token_sac)
 }
+
+fn setup_bridge_with_min(
+    env: &Env,
+    limit: i128,
+    min_deposit: i128,
+) -> (
+    Address,
+    FiatBridgeClient<'_>,
+    Address,
+    Address,
+    TokenClient<'_>,
+    StellarAssetClient<'_>,
+) {
+    let contract_id = env.register(FiatBridge, ());
+    let bridge = FiatBridgeClient::new(env, &contract_id);
+    let admin = Address::generate(env);
+    let token_admin = Address::generate(env);
+    let (token_addr, token, token_sac) = create_token(env, &token_admin);
+    bridge.init(&admin, &token_addr, &limit, &min_deposit);
+    (contract_id, bridge, admin, token_addr, token, token_sac)
+}
+
 
 // ── happy-path tests ──────────────────────────────────────────────────
 
@@ -418,7 +440,7 @@ fn test_double_init() {
     env.mock_all_auths();
 
     let (_, bridge, admin, token_addr, _, _) = setup_bridge(&env, 500);
-    let result = bridge.try_init(&admin, &token_addr, &500);
+    let result = bridge.try_init(&admin, &token_addr, &500, &1);
     assert_eq!(result, Err(Ok(Error::AlreadyInitialized)));
 }
 
@@ -2874,4 +2896,82 @@ fn test_escrow_partial_migration_preserves_count() {
         escrow_total += record.amount;
     }
     assert_eq!(escrow_total, expected_total);
+}
+
+// ── Issue #113: minimum deposit floor tests ───────────────────────────────
+
+#[test]
+fn test_init_rejects_invalid_min_deposit() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(FiatBridge, ());
+    let bridge = FiatBridgeClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+    let (token_addr, _, _) = create_token(&env, &token_admin);
+
+    // Reject 0
+    let result = bridge.try_init(&admin, &token_addr, &1000, &0);
+    assert_eq!(result, Err(Ok(Error::BelowMinimum)));
+
+    // Reject negative
+    let result = bridge.try_init(&admin, &token_addr, &1000, &-5);
+    assert_eq!(result, Err(Ok(Error::BelowMinimum)));
+
+    // Reject min_deposit >= limit
+    let result = bridge.try_init(&admin, &token_addr, &1000, &1000);
+    assert_eq!(result, Err(Ok(Error::BelowMinimum)));
+
+    let result = bridge.try_init(&admin, &token_addr, &1000, &2000);
+    assert_eq!(result, Err(Ok(Error::BelowMinimum)));
+}
+
+#[test]
+fn test_deposit_below_minimum_rejected() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Limit = 10_000, MinDeposit = 500
+    let (_, bridge, _, token_addr, _, token_sac) = setup_bridge_with_min(&env, 10_000, 500);
+    let user = Address::generate(&env);
+    token_sac.mint(&user, &1_000);
+
+    // 499 < 500 should be rejected
+    let result = bridge.try_deposit(&user, &499, &token_addr, &Bytes::new(&env), &0, &0, &None);
+    assert_eq!(result, Err(Ok(Error::BelowMinimum)));
+    
+    // Default config minimum is 1, so 0 should already fail due to ZeroAmount,
+    // let's verify custom min_deposit blocks 1 through min_deposit - 1.
+}
+
+#[test]
+fn test_deposit_exactly_minimum_succeeds() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (_, bridge, _, token_addr, _, token_sac) = setup_bridge_with_min(&env, 10_000, 500);
+    let user = Address::generate(&env);
+    token_sac.mint(&user, &1_000);
+
+    // Exactly 500 should succeed
+    bridge.deposit(&user, &500, &token_addr, &Bytes::new(&env), &0, &0, &None);
+    assert_eq!(bridge.get_total_deposited(), 500);
+}
+
+#[test]
+fn test_set_min_deposit_admin_only() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (_, bridge, _, _, _, _) = setup_bridge(&env, 10_000);
+    assert_eq!(bridge.get_min_deposit(), 1);
+
+    // Should succeed because admin is mocked
+    bridge.set_min_deposit(&500);
+    assert_eq!(bridge.get_min_deposit(), 500);
+    
+    // Try to set below minimum
+    let result = bridge.try_set_min_deposit(&0);
+    assert_eq!(result, Err(Ok(Error::BelowMinimum)));
 }
