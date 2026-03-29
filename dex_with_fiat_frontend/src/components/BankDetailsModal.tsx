@@ -28,6 +28,7 @@ import TransferTimeline, {
 } from '@/components/TransferTimeline';
 import { useAccessibleModal } from '@/hooks/useAccessibleModal';
 import { useIdempotentAction } from '@/hooks/useIdempotentAction';
+import { getOrCreateClientSessionId } from '@/lib/clientSession';
 
 interface Bank {
   id: number;
@@ -79,11 +80,12 @@ export default function BankDetailsModal({
 
   const { addNotification } = useNotifications();
   const { addEntry } = useTxHistory();
-  
-  const { execute: executePayoutConfirm, isProcessing: isPayoutProcessing } = useIdempotentAction({
-    cooldownMs: 3000,
-    logSuppressed: true,
-  });
+
+  const { execute: executePayoutConfirm, isProcessing: isPayoutProcessing } =
+    useIdempotentAction({
+      cooldownMs: 3000,
+      logSuppressed: true,
+    });
 
   const [step, setStep] = useState<Step>(1);
 
@@ -261,7 +263,7 @@ export default function BankDetailsModal({
       isPayoutProcessing
     )
       return;
-    
+
     await executePayoutConfirm(async (idempotencyKey) => {
       setPayoutLoading(true);
       setPayoutError('');
@@ -272,7 +274,7 @@ export default function BankDetailsModal({
         // 1. Create Paystack transfer recipient
         const recipientRes = await fetch('/api/create-recipient', {
           method: 'POST',
-          headers: { 
+          headers: {
             'Content-Type': 'application/json',
             'X-Idempotency-Key': idempotencyKey,
           },
@@ -304,7 +306,7 @@ export default function BankDetailsModal({
         const ngnValue = lockedQuote.ngnAmount;
         const transferRes = await fetch('/api/initiate-transfer', {
           method: 'POST',
-          headers: { 
+          headers: {
             'Content-Type': 'application/json',
             'X-Idempotency-Key': idempotencyKey,
           },
@@ -313,6 +315,7 @@ export default function BankDetailsModal({
             reason: `XLM to NGN - ${xlmAmount} XLM`,
             amount: ngnValue,
             recipient: recipientJson.data.recipient_code,
+            clientSessionId: getOrCreateClientSessionId(),
           }),
         });
         const transferJson: {
@@ -331,7 +334,7 @@ export default function BankDetailsModal({
         );
         addEntry({
           kind: 'payout',
-          status: 'completed',
+          status: 'pending',
           amount: String(xlmAmount),
           asset: 'XLM',
           fiatAmount: lockedQuote.ngnAmount.toLocaleString('en-NG', {
@@ -341,7 +344,9 @@ export default function BankDetailsModal({
           fiatCurrency: 'NGN',
           note: payoutNote.trim() || undefined,
           reference:
-            transferJson.data.reference || transferJson.data.transfer_code || '',
+            transferJson.data.reference ||
+            transferJson.data.transfer_code ||
+            '',
           message: `Fiat payout initiated to ${selectedBank.name}.`,
         });
         // Simulation block
@@ -349,10 +354,15 @@ export default function BankDetailsModal({
         setIsPollingStatus(false);
         pushStatusEvent('success', 'Bank transfer confirmed');
         setStep(4);
-        addNotification('payout_success', 'Fiat payout successfully completed!');
+        addNotification(
+          'payout_success',
+          'Fiat payout successfully completed!',
+        );
       } catch (err) {
         const errorMsg =
-          err instanceof Error ? err.message : 'Payout failed. Please try again.';
+          err instanceof Error
+            ? err.message
+            : 'Payout failed. Please try again.';
         setPayoutError(errorMsg);
         setIsPollingStatus(false);
         pushStatusEvent('failed', `Transfer failed: ${errorMsg}`);
@@ -468,12 +478,13 @@ export default function BankDetailsModal({
             {([1, 2, 3] as const).map((s) => (
               <React.Fragment key={s}>
                 <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${step === s
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
+                    step === s
                       ? 'bg-blue-600 text-white'
                       : step > s
                         ? 'bg-green-500 text-white'
                         : 'bg-gray-700 text-gray-400'
-                    }`}
+                  }`}
                 >
                   {s}
                 </div>
@@ -615,10 +626,11 @@ export default function BankDetailsModal({
                         key={bank.id}
                         type="button"
                         onClick={() => setSelectedBank(bank)}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${selectedBank?.id === bank.id
+                        className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                          selectedBank?.id === bank.id
                             ? 'bg-blue-600 text-white'
                             : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                          }`}
+                        }`}
                       >
                         {bank.name}
                       </button>

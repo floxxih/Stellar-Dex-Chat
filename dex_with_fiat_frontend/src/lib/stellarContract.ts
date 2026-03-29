@@ -84,6 +84,7 @@ declare global {
     getBridgeLimit: () => Promise<bigint>;
     getContractBalance: () => Promise<bigint>;
     getTotalDeposited: () => Promise<bigint>;
+    getWithdrawalQueueDepth: () => Promise<number>;
   }
 }
 
@@ -93,6 +94,7 @@ try {
     window.getBridgeLimit = async () => getBridgeLimit();
     window.getContractBalance = async () => getContractBalance();
     window.getTotalDeposited = async () => getTotalDeposited();
+    window.getWithdrawalQueueDepth = async () => getWithdrawalQueueDepth();
   }
 } catch {
   // ignore
@@ -342,6 +344,11 @@ export async function validateBridgeAmountLimit(
 /** Returns the running total of all deposits ever made. */
 export async function getTotalDeposited(): Promise<bigint> {
   return viewCall<bigint>('get_total_deposited');
+}
+
+export async function getWithdrawalQueueDepth(): Promise<number> {
+  const value = await viewCall<bigint | number>('get_wq_depth');
+  return Number(value);
 }
 
 /** Returns the accrued fees for the specified token. */

@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import jsPDF from 'jspdf';
 import { useChatHistory } from '@/hooks/useChatHistory';
 import { useTxHistory } from '@/hooks/useTxHistory';
+import { useStellarWallet } from '@/contexts/StellarWalletContext';
 import {
   MessageSquare,
   Trash2,
@@ -57,34 +59,54 @@ function SessionRow({
           <div className="theme-text-muted flex items-center mt-1 text-xs">
             <Clock className="w-3 h-3 mr-1" />
             <span>
-              {formatDate(session.lastUpdated || session.createdAt || new Date())}
+              {formatDate(
+                session.lastUpdated || session.createdAt || new Date(),
+              )}
             </span>
-            <span className="ml-2">{session.messages?.length || 0} messages</span>
+            <span className="ml-2">
+              {session.messages?.length || 0} messages
+            </span>
           </div>
           {session.messages && session.messages.length > 0 && (
             <p className="theme-text-secondary text-xs mt-1 truncate">
-              {session.messages[session.messages.length - 1]?.content?.substring(0, 50)}...
+              {session.messages[
+                session.messages.length - 1
+              ]?.content?.substring(0, 50)}
+              ...
             </p>
           )}
         </div>
 
         <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
-            onClick={(e) => { e.stopPropagation(); onTogglePin(session.id); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onTogglePin(session.id);
+            }}
             className="theme-text-muted hover:bg-[var(--color-primary-soft)] p-1 rounded transition-all hover:scale-110"
             title={session.pinned ? 'Unpin conversation' : 'Pin conversation'}
           >
-            {session.pinned ? <PinOff className="w-3 h-3" /> : <Pin className="w-3 h-3" />}
+            {session.pinned ? (
+              <PinOff className="w-3 h-3" />
+            ) : (
+              <Pin className="w-3 h-3" />
+            )}
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); onExport(session.id); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onExport(session.id);
+            }}
             className="theme-text-muted hover:bg-[var(--color-primary-soft)] p-1 rounded transition-all hover:scale-110"
             title="Export conversation"
           >
             <Download className="w-3 h-3" />
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); onDelete(session.id); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(session.id);
+            }}
             className="theme-text-muted hover:bg-[var(--color-danger-soft)] p-1 rounded transition-all hover:scale-110"
             title="Delete conversation"
           >
@@ -118,7 +140,8 @@ export default function ChatHistorySidebar({
     togglePin,
     hasHistory,
   } = useChatHistory();
-  const { entries, exportEntries, clearEntries, updateEntry } = useTxHistory();
+  const { entries, clearEntries, updateEntry } = useTxHistory();
+  const { connection } = useStellarWallet();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(
@@ -132,7 +155,9 @@ export default function ChatHistorySidebar({
   }, []);
 
   const allSessions = [...pinnedSessions, ...unpinnedSessions];
-  const filteredSessions = searchQuery ? searchSessions(searchQuery) : allSessions;
+  const filteredSessions = searchQuery
+    ? searchSessions(searchQuery)
+    : allSessions;
   const filteredPinned = filteredSessions.filter((s) => s.pinned);
   const filteredUnpinned = filteredSessions.filter((s) => !s.pinned);
 
@@ -159,15 +184,67 @@ export default function ChatHistorySidebar({
   };
 
   const handleExportTransactions = () => {
-    const blob = new Blob([exportEntries()], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'transaction-history.json';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const doc = new jsPDF();
+    const exportedAt = new Date();
+    const walletAddress = connection.address || 'Wallet not connected';
+    const exportRows = entries.filter((entry) => entry.kind !== 'risk_warning');
+    const fileDate = exportedAt.toISOString().slice(0, 10);
+
+    doc.setFontSize(16);
+    doc.text('Stellar Bridge Transaction History', 14, 18);
+    doc.setFontSize(10);
+    doc.text(
+      `Exported: ${exportedAt.toLocaleString()} | Records: ${exportRows.length}`,
+      14,
+      26,
+    );
+
+    const headers = ['Date', 'Type', 'Amount', 'Token', 'Receipt/Request ID'];
+    const columnXs = [14, 48, 88, 122, 148];
+    let y = 38;
+
+    headers.forEach((header, index) => {
+      doc.text(header, columnXs[index], y);
+    });
+
+    y += 6;
+    doc.line(14, y, 196, y);
+    y += 8;
+
+    if (exportRows.length === 0) {
+      doc.text('No transaction history available.', 14, y);
+      y += 10;
+    } else {
+      exportRows.forEach((entry) => {
+        if (y > 260) {
+          doc.addPage();
+          y = 20;
+        }
+
+        const row = [
+          entry.createdAt.toLocaleDateString(),
+          entry.kind === 'payout' ? 'Withdrawal' : 'Deposit',
+          entry.fiatAmount
+            ? `${entry.amount ?? '-'} / ${entry.fiatAmount}`
+            : (entry.amount ?? '-'),
+          entry.asset || entry.fiatCurrency || 'XLM',
+          entry.reference || entry.txHash || '-',
+        ];
+
+        row.forEach((value, index) => {
+          const maxWidth = index === 4 ? 42 : 28;
+          const lines = doc.splitTextToSize(String(value), maxWidth);
+          doc.text(lines, columnXs[index], y);
+        });
+
+        y += 12;
+      });
+    }
+
+    doc.setFontSize(9);
+    doc.text(`Wallet: ${walletAddress}`, 14, 280);
+    doc.text(`Export timestamp: ${exportedAt.toLocaleString()}`, 14, 286);
+    doc.save(`stellar-bridge-history-${fileDate}.pdf`);
   };
 
   const formatDate = (date: Date) => {
@@ -190,11 +267,32 @@ export default function ChatHistorySidebar({
   };
 
   return (
-    <div className={`theme-surface h-full flex flex-col transition-all duration-300 border-r ${isCollapsed ? 'w-20' : 'w-full'} transition-colors duration-300`}>
-      <div className={`theme-border border-b transition-colors duration-300 ${isCollapsed ? 'p-4 flex flex-col items-center' : 'p-4'}`}>
-        <div className={`flex items-center justify-between mb-4 w-full ${isCollapsed ? 'flex-col gap-4' : ''}`}>
-          {!isCollapsed && <h2 className="theme-text-primary text-lg font-semibold">Activity</h2>}
-          <div className={`flex items-center gap-1 ${isCollapsed ? 'flex-col' : ''}`}>
+    <div
+      className={`theme-surface h-full flex flex-col transition-all duration-300 border-r ${
+        isCollapsed ? 'w-20' : 'w-full'
+      } transition-colors duration-300`}
+    >
+      <div
+        className={`theme-border border-b transition-colors duration-300 ${
+          isCollapsed ? 'p-4 flex flex-col items-center' : 'p-4'
+        }`}
+      >
+        <div
+          className={`flex items-center justify-between mb-4 w-full ${
+            isCollapsed ? 'flex-col gap-4' : ''
+          }`}
+        >
+
+          {!isCollapsed && (
+            <h2 className="theme-text-primary text-lg font-semibold">
+              Activity
+            </h2>
+          )}
+          <div
+            className={`flex items-center gap-1 ${
+              isCollapsed ? 'flex-col' : ''
+            }`}
+          >
             <button
               onClick={clearAllHistory}
               className="theme-text-muted hover:bg-[var(--color-danger-soft)] p-2 rounded-lg transition-all duration-200 hover:scale-110"
@@ -245,7 +343,10 @@ export default function ChatHistorySidebar({
             icon={MessageSquare}
             title="No conversations yet"
             description="Start chatting to see your history here"
-            cta={{ label: 'New Conversation', onClick: () => window.location.reload() }}
+            cta={{
+              label: 'New Conversation',
+              onClick: () => window.location.reload(),
+            }}
           />
         ) : filteredSessions.length === 0 ? (
           <EmptyState
@@ -255,7 +356,9 @@ export default function ChatHistorySidebar({
             cta={{ label: 'Clear search', onClick: () => setSearchQuery('') }}
           />
         ) : (
-          <div className={`p-2 ${isCollapsed ? 'flex flex-col items-center' : ''}`}>
+          <div
+            className={`p-2 ${isCollapsed ? 'flex flex-col items-center' : ''}`}
+          >
             {filteredPinned.length > 0 && (
               <>
                 {!isCollapsed && (
@@ -298,123 +401,118 @@ export default function ChatHistorySidebar({
         )}
       </div>
 
-      <div className="theme-border border-t p-4 space-y-4">
+      <div className={`theme-border border-t p-4 ${isCollapsed ? 'flex flex-col items-center' : ''}`}>
         <PriceTicker symbols={['XLM', 'ETH', 'BTC']} currency="usd" />
 
         <div className={`flex items-center justify-between mb-3 w-full ${isCollapsed ? 'flex-col gap-3' : ''}`}>
           <div className="flex items-center gap-2">
             <Coins className="w-4 h-4 text-[var(--color-primary)]" />
             {!isCollapsed && (
-              <h3 className="theme-text-primary text-sm font-semibold">
-                Transaction History
-              </h3>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={handleExportTransactions}
+                  className="theme-text-muted hover:bg-[var(--color-surface-muted)] p-1.5 rounded-md transition-colors"
+                  title="Export transaction history"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={clearEntries}
+                  className="theme-text-muted hover:bg-[var(--color-danger-soft)] p-1.5 rounded-md transition-colors"
+                  title="Clear transaction history"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             )}
           </div>
-          {!isCollapsed && (
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={handleExportTransactions}
-                className="theme-text-muted hover:bg-[var(--color-surface-muted)] p-1.5 rounded-md transition-colors"
-                title="Export transaction history"
-              >
-                <Download className="w-3.5 h-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={clearEntries}
-                className="theme-text-muted hover:bg-[var(--color-danger-soft)] p-1.5 rounded-md transition-colors"
-                title="Clear transaction history"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+
+          {isCollapsed ? (
+            <div className="flex justify-center">
+              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">
+                {entries.length}
+              </div>
+            </div>
+          ) : entries.length === 0 ? (
+            <EmptyState
+              icon={Coins}
+              title="No transactions yet"
+              description="Deposits, payouts, risk checks, and notes will appear here."
+              className="py-3"
+            />
+          ) : (
+            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+              {entries.slice(0, 8).map((entry) => (
+                <div
+                  key={entry.id}
+                  className="theme-surface-muted theme-border rounded-lg border p-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="theme-text-primary text-xs font-semibold capitalize">
+                        {entry.kind.replace('_', ' ')}
+                      </p>
+                      <p className="theme-text-secondary text-xs mt-1">
+                        {entry.message}
+                      </p>
+                    </div>
+                    <span className="theme-text-muted text-[11px] whitespace-nowrap">
+                      {formatDate(entry.createdAt)}
+                    </span>
+                  </div>
+                  {(entry.amount || entry.fiatAmount) && (
+                    <p className="theme-text-muted text-[11px] mt-2">
+                      {entry.amount
+                        ? `${entry.amount} ${entry.asset || 'XLM'}`
+                        : ''}
+                      {entry.amount && entry.fiatAmount ? ' · ' : ''}
+                      {entry.fiatAmount
+                        ? `${entry.fiatAmount} ${entry.fiatCurrency || 'NGN'}`
+                        : ''}
+                    </p>
+                  )}
+                  {entry.note && (
+                    <p className="theme-text-primary text-xs mt-2">
+                      Note:{' '}
+                      <span className="theme-text-secondary">{entry.note}</span>
+                    </p>
+                  )}
+                  {entry.kind === 'payout' &&
+                    entry.status !== 'cancelled' &&
+                    entry.reference &&
+                    Date.now() - new Date(entry.createdAt).getTime() <
+                      2 * 60 * 1000 && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const res = await fetch(
+                              `/api/transfer-status/${entry.reference}`,
+                              { method: 'POST' },
+                            );
+                            const json = await res.json();
+                            if (json.success) {
+                              updateEntry(entry.id, {
+                                status: 'cancelled',
+                                message: 'Payout cancelled.',
+                              });
+                            }
+                          } catch (err) {
+                            console.error('Cancel error:', err);
+                          }
+                        }}
+                        className="mt-2 w-full flex items-center justify-center gap-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 py-1.5 rounded text-xs font-medium transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" /> Cancel Payout
+                      </button>
+                    )}
+                </div>
+              ))}
             </div>
           )}
         </div>
-
-        {isCollapsed ? (
-          <div className="flex justify-center">
-             <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">
-               {entries.length}
-             </div>
-          </div>
-        ) : entries.length === 0 ? (
-          <EmptyState
-            icon={Coins}
-            title="No transactions yet"
-            description="Deposits, payouts, risk checks, and notes will appear here."
-            className="py-3"
-          />
-        ) : (
-          <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-            {entries.slice(0, 8).map((entry) => (
-              <div
-                key={entry.id}
-                className="theme-surface-muted theme-border rounded-lg border p-3"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="theme-text-primary text-xs font-semibold capitalize">
-                      {entry.kind.replace('_', ' ')}
-                    </p>
-                    <p className="theme-text-secondary text-xs mt-1">
-                      {entry.message}
-                    </p>
-                  </div>
-                  <span className="theme-text-muted text-[11px] whitespace-nowrap">
-                    {formatDate(entry.createdAt)}
-                  </span>
-                </div>
-                {(entry.amount || entry.fiatAmount) && (
-                  <p className="theme-text-muted text-[11px] mt-2">
-                    {entry.amount
-                      ? `${entry.amount} ${entry.asset || 'XLM'}`
-                      : ''}
-                    {entry.amount && entry.fiatAmount ? ' · ' : ''}
-                    {entry.fiatAmount
-                      ? `${entry.fiatAmount} ${entry.fiatCurrency || 'NGN'}`
-                      : ''}
-                  </p>
-                )}
-                {entry.note && (
-                  <p className="theme-text-primary text-xs mt-2">
-                    Note:{' '}
-                    <span className="theme-text-secondary">{entry.note}</span>
-                  </p>
-                )}
-                {entry.kind === 'payout' &&
-                  entry.status !== 'cancelled' &&
-                  entry.reference &&
-                  Date.now() - new Date(entry.createdAt).getTime() <
-                    2 * 60 * 1000 && (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          const res = await fetch(
-                            `/api/transfer-status/${entry.reference}`,
-                            { method: 'POST' },
-                          );
-                          const json = await res.json();
-                          if (json.success) {
-                            updateEntry(entry.id, {
-                              status: 'cancelled',
-                              message: 'Payout cancelled.',
-                            });
-                          }
-                        } catch (err) {
-                          console.error('Cancel error:', err);
-                        }
-                      }}
-                      className="mt-2 w-full flex items-center justify-center gap-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 py-1.5 rounded text-xs font-medium transition-colors"
-                    >
-                      <X className="w-3.5 h-3.5" /> Cancel Payout
-                    </button>
-                  )}
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       <div className="theme-border p-4 border-t transition-colors duration-300">
@@ -424,7 +522,7 @@ export default function ChatHistorySidebar({
           title="New Conversation"
         >
           <Plus className={`w-4 h-4 ${isCollapsed ? '' : 'mr-2'}`} />
-          {!isCollapsed && "New Conversation"}
+          {!isCollapsed && 'New Conversation'}
         </button>
       </div>
 
@@ -446,7 +544,9 @@ export default function ChatHistorySidebar({
                 Cancel
               </button>
               <button
-                onClick={() => showDeleteConfirm && handleDeleteSession(showDeleteConfirm)}
+                onClick={() =>
+                  showDeleteConfirm && handleDeleteSession(showDeleteConfirm)
+                }
                 className="flex-1 px-4 py-2 text-white bg-red-600 hover:bg-red-700 rounded-lg transition-all duration-200 font-medium"
               >
                 Delete

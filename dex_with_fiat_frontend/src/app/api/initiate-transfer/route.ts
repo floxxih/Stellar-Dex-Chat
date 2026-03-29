@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPayoutProvider } from '@/lib/payout/providers/registry';
 import { telemetry } from '@/lib/telemetry';
 import { applyRateLimit, getClientIp } from '@/lib/rateLimit';
+import { setTransferStatus } from '@/lib/transferStore';
 
 const RATE_LIMIT = { maxRequests: 3, windowMs: 60_000 };
 
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
       endpoint: '/api/initiate-transfer',
     });
 
-    const { source, reason, amount, recipient, reference } =
+    const { source, reason, amount, recipient, reference, clientSessionId } =
       await request.json();
 
     telemetry.addLog(span.spanId, 'info', 'Request parsed', {
@@ -62,6 +63,23 @@ export async function POST(request: NextRequest) {
       recipient,
       reference,
     });
+    const transferReference =
+      typeof data.reference === 'string' && data.reference
+        ? data.reference
+        : typeof reference === 'string' && reference
+          ? reference
+          : '';
+
+    if (transferReference) {
+      setTransferStatus({
+        reference: transferReference,
+        status: 'pending',
+        amount: Number(amount),
+        updatedAt: new Date().toISOString(),
+        clientSessionId:
+          typeof clientSessionId === 'string' ? clientSessionId : undefined,
+      });
+    }
 
     return NextResponse.json({
       success: true,
