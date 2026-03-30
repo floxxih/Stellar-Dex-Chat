@@ -16,6 +16,8 @@ import {
   Coins,
   Pin,
   PinOff,
+  FileJson,
+  FileText,
   Activity,
   ArrowUpRight,
   ArrowDownLeft,
@@ -31,7 +33,8 @@ interface SessionRowProps {
   session: ChatSession;
   isActive: boolean;
   onLoad: (id: string) => void;
-  onExport: (id: string) => void;
+  onExportJSON: (id: string) => void;
+  onExportTXT: (id: string) => void;
   onDelete: (id: string) => void;
   onTogglePin: (id: string) => void;
   formatDate: (d: Date) => string;
@@ -41,11 +44,14 @@ function SessionRow({
   session,
   isActive,
   onLoad,
-  onExport,
+  onExportJSON,
+  onExportTXT,
   onDelete,
   onTogglePin,
   formatDate,
 }: SessionRowProps) {
+  const [showExportMenu, setShowExportMenu] = useState(false);
+
   return (
     <div
       className={`group relative p-3 mb-2 rounded-lg cursor-pointer transition-all duration-200 border ${
@@ -96,16 +102,44 @@ function SessionRow({
               <Pin className="w-3 h-3" />
             )}
           </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onExport(session.id);
-            }}
-            className="theme-text-muted hover:bg-[var(--color-primary-soft)] p-1 rounded transition-all hover:scale-110"
-            title="Export conversation"
-          >
-            <Download className="w-3 h-3" />
-          </button>
+
+          {/* Export Menu */}
+          <div className="relative">
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowExportMenu(!showExportMenu); }}
+              className="theme-text-muted hover:bg-[var(--color-primary-soft)] p-1 rounded transition-all hover:scale-110"
+              title="Export conversation"
+            >
+              <Download className="w-3 h-3" />
+            </button>
+            {showExportMenu && (
+              <div className="absolute right-0 mt-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg shadow-lg z-50 min-w-max">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onExportJSON(session.id);
+                    setShowExportMenu(false);
+                  }}
+                  className="w-full text-left px-3 py-2 text-xs font-medium theme-text-primary hover:bg-[var(--color-surface-muted)] flex items-center gap-2 transition-colors rounded-t-lg"
+                >
+                  <FileJson className="w-3 h-3" />
+                  Export JSON
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onExportTXT(session.id);
+                    setShowExportMenu(false);
+                  }}
+                  className="w-full text-left px-3 py-2 text-xs font-medium theme-text-primary hover:bg-[var(--color-surface-muted)] flex items-center gap-2 transition-colors rounded-b-lg"
+                >
+                  <FileText className="w-3 h-3" />
+                  Export TXT
+                </button>
+              </div>
+            )}
+          </div>
+
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -139,7 +173,8 @@ export default function ChatHistorySidebar({
     currentSessionId,
     deleteSession,
     clearAllHistory,
-    exportSession,
+    exportSessionAsJSON,
+    exportSessionAsTXT,
     searchSessions,
     togglePin,
     hasHistory,
@@ -193,21 +228,48 @@ export default function ChatHistorySidebar({
     setShowDeleteConfirm(null);
   };
 
-  const handleExportSession = (sessionId: string) => {
-    const exportData = exportSession(sessionId);
-    if (!exportData) {
+  const handleExportSessionJSON = (sessionId: string) => {
+    const exportResult = exportSessionAsJSON(sessionId);
+    if (!exportResult) {
+      console.warn('Session not found or export failed');
       return;
     }
 
-    const blob = new Blob([exportData], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `chat-session-${sessionId}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    try {
+      const blob = new Blob([exportResult.data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = exportResult.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to export session as JSON:', error);
+    }
+  };
+
+  const handleExportSessionTXT = (sessionId: string) => {
+    const exportResult = exportSessionAsTXT(sessionId);
+    if (!exportResult) {
+      console.warn('Session not found or export failed');
+      return;
+    }
+
+    try {
+      const blob = new Blob([exportResult.data], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = exportResult.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to export session as TXT:', error);
+    }
   };
 
   const handleExportTransactions = () => {
@@ -309,7 +371,6 @@ export default function ChatHistorySidebar({
             isCollapsed ? 'flex-col gap-4' : ''
           }`}
         >
-
           {!isCollapsed && (
             <h2 className="theme-text-primary text-lg font-semibold">
               Activity
@@ -366,6 +427,33 @@ export default function ChatHistorySidebar({
         {isLoading ? (
           <SkeletonSidebar />
         ) : (
+          <div
+            className={`p-2 ${isCollapsed ? 'flex flex-col items-center' : ''}`}
+          >
+            {filteredPinned.length > 0 && (
+              <>
+                {!isCollapsed && (
+                  <p className="theme-text-muted text-xs font-semibold uppercase tracking-wider px-1 py-1 mt-1">
+                    Pinned
+                  </p>
+                )}
+                {filteredPinned.map((session) => (
+                  <SessionRow
+                    key={session.id}
+                    session={session}
+                    isActive={currentSessionId === session.id}
+                    onLoad={onLoadSession}
+                    onExportJSON={handleExportSessionJSON}
+                    onExportTXT={handleExportSessionTXT}
+                    onDelete={(id) => setShowDeleteConfirm(id)}
+                    onTogglePin={togglePin}
+                    formatDate={formatDate}
+                  />
+                ))}
+                {!isCollapsed && filteredUnpinned.length > 0 && (
+                  <p className="theme-text-muted text-xs font-semibold uppercase tracking-wider px-1 py-1 mt-3">
+                    Recent
+                  </p>
           <div className="flex flex-col h-full">
             {/* Contract Activity Section */}
             {!isCollapsed && (
@@ -413,6 +501,19 @@ export default function ChatHistorySidebar({
                 )}
               </div>
             )}
+            {filteredUnpinned.map((session) => (
+              <SessionRow
+                key={session.id}
+                session={session}
+                isActive={currentSessionId === session.id}
+                onLoad={onLoadSession}
+                onExportJSON={handleExportSessionJSON}
+                onExportTXT={handleExportSessionTXT}
+                onDelete={(id) => setShowDeleteConfirm(id)}
+                onTogglePin={togglePin}
+                formatDate={formatDate}
+              />
+            ))}
 
             <div className="flex-1 overflow-y-auto">
               {!hasHistory ? (
@@ -484,9 +585,16 @@ export default function ChatHistorySidebar({
       <div className={`theme-border border-t p-4 ${isCollapsed ? 'flex flex-col items-center' : ''}`}>
         <PriceTicker symbols={['XLM', 'ETH', 'BTC']} currency="usd" />
 
-        <div className={`flex items-center justify-between mb-3 w-full ${isCollapsed ? 'flex-col gap-3' : ''}`}>
-          <div className="flex items-center gap-2">
-            <Coins className="w-4 h-4 text-[var(--color-primary)]" />
+        <div className={`theme-border border-t p-4 ${isCollapsed ? 'flex flex-col items-center' : ''}`}>
+          <div className={`flex items-center justify-between mb-3 w-full ${isCollapsed ? 'flex-col gap-3' : ''}`}>
+            <div className="flex items-center gap-2">
+              <Coins className="w-4 h-4 text-[var(--color-primary)]" />
+              {!isCollapsed && (
+                <h3 className="theme-text-primary text-sm font-semibold">
+                  Transaction History
+                </h3>
+              )}
+            </div>
             {!isCollapsed && (
               <div className="flex items-center gap-1">
                 <button
@@ -562,7 +670,7 @@ export default function ChatHistorySidebar({
                   {entry.kind === 'payout' &&
                     entry.status !== 'cancelled' &&
                     entry.reference &&
-                    Date.now() - new Date(entry.createdAt).getTime() <
+                    Date.now() - new Date(entry.createdAt).getTime() 
                       2 * 60 * 1000 && (
                       <button
                         type="button"

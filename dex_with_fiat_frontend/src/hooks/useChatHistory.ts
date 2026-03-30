@@ -136,6 +136,30 @@ export const useChatHistory = () => {
     [historyState.sessions],
   );
 
+  const exportSessionAsJSON = useCallback(
+    (sessionId: string): { data: string; filename: string } | null => {
+      const session = historyState.sessions.find((s) => s.id === sessionId);
+      if (!session) return null;
+
+      const data = ChatHistoryManager.exportSessionAsJSON(session);
+      const filename = ChatHistoryManager.generateExportFilename(sessionId, 'json');
+      return { data, filename };
+    },
+    [historyState.sessions],
+  );
+
+  const exportSessionAsTXT = useCallback(
+    (sessionId: string): { data: string; filename: string } | null => {
+      const session = historyState.sessions.find((s) => s.id === sessionId);
+      if (!session) return null;
+
+      const data = ChatHistoryManager.exportSessionAsTXT(session);
+      const filename = ChatHistoryManager.generateExportFilename(sessionId, 'txt');
+      return { data, filename };
+    },
+    [historyState.sessions],
+  );
+
   const searchSessions = useCallback(
     (query: string): ChatSession[] => {
       return ChatHistoryManager.searchSessions(historyState.sessions, query);
@@ -202,6 +226,8 @@ export const useChatHistory = () => {
     deleteSession,
     clearAllHistory,
     exportSession,
+    exportSessionAsJSON,
+    exportSessionAsTXT,
     searchSessions,
     togglePin,
     setIsHistoryOpen,

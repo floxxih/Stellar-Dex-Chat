@@ -139,19 +139,126 @@ export class ChatHistoryManager {
       .slice(0, MAX_SESSIONS);
   }
 
-  static exportSession(session: ChatSession): string {
+  /**
+   * Generate a filename for exported chat sessions
+   * Format: chat_SESSION_ID_YYYY-MM-DD_HHmmss
+   */
+  static generateExportFilename(sessionId: string, format: 'json' | 'txt'): string {
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
+    const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, ''); // HHmmss
+    const safeSessionId = sessionId.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 20);
+    return `chat_${safeSessionId}_${dateStr}_${timeStr}.${format}`;
+  }
+
+  /**
+   * Export session as JSON with comprehensive metadata
+   */
+  static exportSessionAsJSON(session: ChatSession): string {
     const exportData = {
-      title: session.title,
+      metadata: {
+        sessionId: session.id,
+        title: session.title,
+        createdAt: session.createdAt.toISOString(),
+        lastUpdated: session.lastUpdated.toISOString(),
+        walletAddress: session.walletAddress || null,
+        totalMessages: session.messages.length,
+        exportedAt: new Date().toISOString(),
+      },
       messages: session.messages.map((msg) => ({
+        id: msg.id,
         role: msg.role,
         content: msg.content,
         timestamp: msg.timestamp.toISOString(),
-        metadata: msg.metadata,
+        metadata: msg.metadata || null,
       })),
-      createdAt: session.createdAt.toISOString(),
     };
 
     return JSON.stringify(exportData, null, 2);
+  }
+
+  /**
+   * Export session as formatted TXT with readable layout
+   */
+  static exportSessionAsTXT(session: ChatSession): string {
+    const lines: string[] = [];
+
+    // Header
+    lines.push('='.repeat(80));
+    lines.push(`CHAT SESSION EXPORT`);
+    lines.push('='.repeat(80));
+    lines.push('');
+
+    // Metadata
+    lines.push('SESSION METADATA');
+    lines.push('-'.repeat(80));
+    lines.push(`Title: ${session.title}`);
+    lines.push(`Session ID: ${session.id}`);
+    lines.push(`Created: ${session.createdAt.toLocaleString()}`);
+    lines.push(`Last Updated: ${session.lastUpdated.toLocaleString()}`);
+    if (session.walletAddress) {
+      lines.push(`Wallet Address: ${session.walletAddress}`);
+    }
+    lines.push(`Total Messages: ${session.messages.length}`);
+    lines.push(`Exported: ${new Date().toLocaleString()}`);
+    lines.push('');
+
+    // Messages
+    lines.push('CONVERSATION');
+    lines.push('-'.repeat(80));
+    lines.push('');
+
+    session.messages.forEach((msg, index) => {
+      const roleLabel = msg.role.toUpperCase();
+      const timestamp = msg.timestamp.toLocaleString();
+      lines.push(`[${index + 1}] ${roleLabel} (${timestamp})`);
+      lines.push('-'.repeat(80));
+      lines.push(msg.content);
+      lines.push('');
+
+      // Include metadata if present
+      if (msg.metadata) {
+        const hasRelevantMetadata = 
+          msg.metadata.transactionData ||
+          msg.metadata.suggestedActions ||
+          msg.metadata.guardrail ||
+          msg.metadata.clarificationQuestion;
+
+        if (hasRelevantMetadata) {
+          lines.push('Metadata:');
+          if (msg.metadata.transactionData) {
+            lines.push(`  Transaction Type: ${msg.metadata.transactionData.type}`);
+            if (msg.metadata.transactionData.amountIn) {
+              lines.push(`  Amount In: ${msg.metadata.transactionData.amountIn} ${msg.metadata.transactionData.tokenIn || 'XLM'}`);
+            }
+            if (msg.metadata.transactionData.fiatAmount) {
+              lines.push(`  Fiat Amount: ${msg.metadata.transactionData.fiatAmount} ${msg.metadata.transactionData.fiatCurrency || 'USD'}`);
+            }
+          }
+          if (msg.metadata.guardrail?.triggered) {
+            lines.push(`  ⚠️ Guardrail: ${msg.metadata.guardrail.reason}`);
+          }
+          if (msg.metadata.clarificationQuestion) {
+            lines.push(`  Question: ${msg.metadata.clarificationQuestion}`);
+          }
+          lines.push('');
+        }
+      }
+    });
+
+    // Footer
+    lines.push('='.repeat(80));
+    lines.push('End of conversation');
+    lines.push('='.repeat(80));
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Legacy export method for backward compatibility
+   */
+  static exportSession(session: ChatSession): string {
+    return this.exportSessionAsJSON(session);
   }
 
   static searchSessions(sessions: ChatSession[], query: string): ChatSession[] {
