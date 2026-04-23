@@ -77,6 +77,9 @@ The `FiatBridge` contract exposes read-only views intended for operational dashb
 - **AI Integration**: Google Generative AI assistant
 - **Fiat Payout**: Paystack API (Nigerian bank transfers)
 
+### 4. Admin Authentication Architecture
+The admin dashboard and administrative actions rely on an on-chain root of trust. The `AdminGuard` component in the Next.js app fetches the configured admin address directly from the smart contract using `getAdmin()`. All administrative write operations require cryptographic signatures matching this address, ensuring front-end role spoofing is impossible. For a detailed architectural breakdown, see the [FiatBridge Contract README](stellar-contracts/FIAT_BRIDGE_README.md#admin-authentication-architecture).
+
 ## Tech Stack
 
 | Layer | Technology | Purpose |

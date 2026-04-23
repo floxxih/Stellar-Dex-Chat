@@ -211,10 +211,13 @@ export default function StellarChatInterface() {
   // ───────────────────────────────────────────────────────────────────────────
 
   // Check if current user is admin
+  // This verifies the connected wallet address against the on-chain smart contract
+  // to toggle admin-specific UI elements (e.g., withdraw buttons, settings) safely.
   useEffect(() => {
     const checkAdmin = async () => {
       if (connection.isConnected && connection.address) {
         try {
+          // Fetch truth directly from the blockchain
           const adminAddr = await getAdmin();
           setIsAdmin(adminAddr === connection.address);
         } catch (err: unknown) {

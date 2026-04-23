@@ -2495,6 +2495,15 @@ impl FiatBridge {
     }
 
     // ── View Functions ────────────────────────────────────────────────────
+
+    /// Returns the authorized admin address of the contract.
+    /// 
+    /// # Architecture
+    /// The admin address is stored in the contract's instance storage and is
+    /// set once during initialization. It serves as the root of trust for
+    /// operations like setting limits, processing withdrawals, and updating
+    /// contract settings. Only transactions authorized by this address are
+    /// permitted to execute administrative functions.
     pub fn get_admin(env: Env) -> Result<Address, Error> {
         env.storage()
             .instance()

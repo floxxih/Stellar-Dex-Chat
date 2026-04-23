@@ -41,6 +41,16 @@ flowchart TD
 
 ---
 
+## Admin Authentication Architecture
+
+Admin privileges in the FiatBridge are strictly tied to the on-chain state. The architecture ensures that no front-end spoofing or bypassed routing can escalate privileges.
+
+1. **Root of Trust**: The admin address is established during `init` and stored directly in the contract's instance storage (`DataKey::Admin`).
+2. **Authorization**: Any administrative operation (e.g., `withdraw`, `set_limit`) requires a cryptographic signature matching the stored admin address. This is enforced by `require_auth` at the Soroban SDK level.
+3. **Frontend Integration**: The Next.js frontend fetches the true admin address by calling `get_admin()` directly on the smart contract before displaying admin UI components or authorizing admin routes. 
+
+---
+
 ## Error Code Reference
 
 All errors are returned as `Result<_, Error>` variants. The contract uses a flat numbering scheme starting at 1.
